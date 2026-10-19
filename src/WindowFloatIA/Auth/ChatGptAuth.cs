@@ -17,7 +17,19 @@ namespace WindowFloatIA.Auth;
 
 public record ModelChoice(string Slug, string DisplayName);
 
-public sealed class ChatGptAuth
+public interface IChatGptAuth
+{
+    IReadOnlyList<AccountRegistration> Accounts { get; }
+    AccountRegistration? Selected { get; }
+    bool IsSignedIn { get; }
+    void Select(AccountRegistration account);
+    Task SignInAsync(AccountRegistration? account, CancellationToken cancellationToken);
+    Task<string> GetAccessTokenAsync(CancellationToken token);
+    Task<IReadOnlyList<ModelChoice>> ListModelsAsync(CancellationToken token);
+    Task<bool> SignOutAsync(CancellationToken token);
+}
+
+public sealed class ChatGptAuth : IChatGptAuth
 {
     private readonly HttpClient _http;
     private readonly IAuthStore _store;

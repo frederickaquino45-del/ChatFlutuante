@@ -200,8 +200,8 @@ public partial class MainWindow : Window
         ModelPicker.ItemsSource = models;
         foreach (var tab in Workspace.Tabs)
         {
-            if (tab.Model.Length == 0) tab.Model = models.FirstOrDefault(m => m.Slug == _lastModel)?.Slug ?? models.FirstOrDefault()?.Slug ?? "";
-            else if (!models.Any(m => m.Slug == tab.Model)) { tab.Model = ""; tab.Status = "Modelo indisponível. Escolha outro modelo."; }
+            if (tab.Model.Length == 0 && !tab.RequiresModelSelection) tab.Model = models.FirstOrDefault(m => m.Slug == _lastModel)?.Slug ?? models.FirstOrDefault()?.Slug ?? "";
+            else if (!models.Any(m => m.Slug == tab.Model)) { tab.RequiresModelSelection = true; tab.Model = ""; tab.Status = "Modelo indisponível. Escolha outro modelo."; }
         }
         ModelPicker.SelectedValue = Workspace.Selected.Model;
         _syncing = false;
@@ -210,6 +210,7 @@ public partial class MainWindow : Window
     private void OnModelSelection(object sender, SelectionChangedEventArgs e)
     {
         if (_syncing || Workspace.Selected.IsBusy || ModelPicker.SelectedItem is not ModelChoice model) return;
+        Workspace.Selected.RequiresModelSelection = false;
         Workspace.Selected.Model = model.Slug;
         Workspace.Selected.Status = "Modelo selecionado: " + model.DisplayName;
         _lastModel = model.Slug;
@@ -237,26 +238,42 @@ public partial class MainWindow : Window
         {
             _auth ??= new ChatGptAuth(Http, new AuthStore());
             var previous = _auth.Selected?.ClientId;
-            var draftBeforeLogin = Workspace.Selected.Draft;
+            var wasSignedIn = _auth.IsSignedIn;
             var settings = new AgentSettingsWindow(_auth, Workspace.Selected.Model) { Owner = this };
-            settings.ShowDialog();
-            if (_auth.Selected?.ClientId != previous || !_auth.IsSignedIn)
-            {
-                Workspace.Reset();
-                if (previous is null && _auth.IsSignedIn) Workspace.Selected.Draft = draftBeforeLogin;
-            }
-            if (_auth.IsSignedIn && settings.Models.Count > 0)
-            {
-                SetModels(settings.Models);
-                if (settings.Model.Length > 0) Workspace.Selected.Model = _lastModel = settings.Model;
-                _syncing = true; ModelPicker.SelectedValue = Workspace.Selected.Model; _syncing = false;
-            }
-            else SetModels(Array.Empty<ModelChoice>());
-            Workspace.Selected.Status = _auth.IsSignedIn ? "ChatGPT conectado" : "ChatGPT desconectado";
+            var accepted = settings.ShowDialog() == true;
+            ApplyAccountResult(previous, wasSignedIn, _auth.Selected?.ClientId, _auth.IsSignedIn,
+                settings.ModelsLoaded, settings.Models, accepted ? settings.Model : null);
             SavePreferences();
         }
         catch { Workspace.Selected.Status = "Não foi possível acessar a sessão protegida do Windows."; }
         FocusComposer();
+    }
+
+    internal void ApplyAccountResult(string? previous, bool wasSignedIn, string? current, bool signedIn,
+        bool modelsLoaded, IReadOnlyList<ModelChoice> models, string? chosenModel)
+    {
+        var accountChanged = previous != current;
+        var signedOut = wasSignedIn && !signedIn;
+        var draft = Workspace.Selected.Draft;
+        if (accountChanged || signedOut)
+        {
+            Workspace.Reset();
+            if (!wasSignedIn && signedIn) Workspace.Selected.Draft = draft;
+        }
+        // Closing/cancelling the dialog must not discard a valid catalogue or draft.
+        if (signedIn && modelsLoaded) SetModels(models);
+        else if (accountChanged || signedOut) SetModels(Array.Empty<ModelChoice>());
+        if (signedIn && modelsLoaded && models.Any(m => m.Slug == chosenModel))
+        {
+            Workspace.Selected.RequiresModelSelection = false;
+            Workspace.Selected.Model = _lastModel = chosenModel!;
+            _syncing = true; ModelPicker.SelectedValue = chosenModel; _syncing = false;
+        }
+        Workspace.Selected.Status = !signedIn ? "Entre com ChatGPT para começar"
+            : _models.Count == 0 ? "Abra Conta para carregar os modelos disponíveis"
+            : Workspace.Selected.Model.Length == 0 ? "Selecione um modelo disponível"
+            : "ChatGPT conectado";
+        UpdateControls();
     }
 
     private void OnHistoryScrollChanged(object sender, ScrollChangedEventArgs e)

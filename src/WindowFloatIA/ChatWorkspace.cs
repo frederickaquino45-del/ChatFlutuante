@@ -29,6 +29,7 @@ public sealed class ChatTab : ObservableState
     public Task CurrentRequest { get; set; } = Task.CompletedTask;
     public bool Closed { get; set; }
     public bool Expanded { get; set; }
+    public bool RequiresModelSelection { get; set; }
     public bool FollowTail { get; set; } = true;
     public double ScrollOffset { get; set; }
     private string _title = "Nova conversa", _draft = "", _model = "", _status = "Pronto";

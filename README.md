@@ -53,7 +53,7 @@ Validação manual: abrir/esconder com outro aplicativo em foco, testar Esc e fe
 - Interface grafite sem barra de título, com cantos arredondados e sombra.
 - Estado compacto e histórico expansível. O envio abre a conversa; o botão no topo recolhe sem apagar.
 - Enter envia; Shift + Enter insere uma nova linha. O campo cresce até 120 pixels e depois permite rolagem.
-- A conexão GPT aceita apenas texto nesta versão. O botão + fica desativado e arrastar arquivos não faz upload.
+- A conexão GPT aceita apenas texto nesta versão. O botão + Novo cria uma conversa; arrastar arquivos não faz upload.
 - O histórico visual mantém as últimas 100 mensagens em memória e é descartado ao encerrar.
 - Arraste a faixa superior para mover; todas as bordas e cantos ajustam largura e altura, respeitando dimensões mínimas. O histórico ocupa o espaço livre, mantendo a entrada na parte inferior.
 - Posição, dimensões independentes dos modos compacto/expandido, último modelo e opção Fixar são salvos em `%LOCALAPPDATA%/WindowFloatIA/window.json`. Preferências ausentes ou inválidas usam os valores padrão.
@@ -69,7 +69,7 @@ Executa verificações dos componentes WPF e do adaptador HTTP com dados simulad
 
 ## Conectar o primeiro agente GPT
 
-1. Execute o aplicativo e clique em **GPT**.
+1. Execute o aplicativo e clique em **Conta**.
 2. Clique em **Continue with ChatGPT** e conclua o login e o consentimento no navegador do sistema.
 3. Após carregar os modelos, a configuração fecha automaticamente. Escolha o modelo no seletor da própria conversa.
 4. Digite a pergunta e pressione Enter.

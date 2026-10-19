@@ -14,14 +14,15 @@ public sealed class AgentSettingsWindow : Window
 {
     public string Model { get; private set; }
     public IReadOnlyList<ModelChoice> Models { get; private set; } = Array.Empty<ModelChoice>();
-    private readonly ChatGptAuth _auth;
+    public bool ModelsLoaded { get; private set; }
+    private readonly IChatGptAuth _auth;
     private readonly ComboBox _accounts = new() { DisplayMemberPath = "Label", MinHeight = 30 };
     private readonly ComboBox _models = new() { DisplayMemberPath = "DisplayName", MinHeight = 30 };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Foreground = Brushes.LightGray, Margin = new Thickness(0, 12, 0, 0) };
     private readonly StackPanel _actions = new();
     private CancellationTokenSource? _operation;
 
-    public AgentSettingsWindow(ChatGptAuth auth, string model)
+    public AgentSettingsWindow(IChatGptAuth auth, string model)
     {
         _auth = auth;
         Model = model;
@@ -62,6 +63,7 @@ public sealed class AgentSettingsWindow : Window
         {
             var revoked = await _auth.SignOutAsync(token);
             _models.ItemsSource = null;
+            ModelsLoaded = false;
             Models = Array.Empty<ModelChoice>();
             Model = "";
             _status.Text = revoked ? "Sessão encerrada. O registro foi mantido para um próximo login." : "Sessão removida deste aplicativo. Não foi possível confirmar a revogação remota; desconecte o app também nas configurações do ChatGPT.";
@@ -106,8 +108,11 @@ public sealed class AgentSettingsWindow : Window
     private async Task LoadModelsAsync(CancellationToken token)
     {
         _models.ItemsSource = null;
+        ModelsLoaded = false;
         Models = Array.Empty<ModelChoice>();
         var choices = await _auth.ListModelsAsync(token);
+        token.ThrowIfCancellationRequested();
+        ModelsLoaded = true;
         Models = choices;
         _models.ItemsSource = choices;
         _models.SelectedIndex = choices.Count > 0 ? 0 : -1;
@@ -127,6 +132,7 @@ public sealed class AgentSettingsWindow : Window
         _operation = operation;
         _actions.IsEnabled = _accounts.IsEnabled = _models.IsEnabled = false;
         _models.ItemsSource = null;
+        ModelsLoaded = false;
         Models = Array.Empty<ModelChoice>();
         _status.Text = "Aguardando conexão. Se o navegador abrir, conclua o login e a autorização por lá.";
         try { await action(operation.Token); }

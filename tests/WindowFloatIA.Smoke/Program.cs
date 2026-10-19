@@ -89,9 +89,42 @@ internal static class Program
         Assert(first.FollowTail && scroll.ScrollableHeight - scroll.VerticalOffset < 2, "Jump resumes automatic follow");
         window.SetModels(new[] { new WindowFloatIA.Auth.ModelChoice("new-model", "Novo modelo disponível") });
         Assert(first.Model == "" && picker.SelectedItem is null, "Unavailable model requires explicit selection");
+        window.SetModels(new[] { new WindowFloatIA.Auth.ModelChoice("new-model", "Novo modelo disponível") });
+        Assert(first.Model == "" && picker.SelectedItem is null, "Catalogue refresh cannot silently replace unavailable model");
         window.SetModels(new[] { new WindowFloatIA.Auth.ModelChoice("test-model", "GPT de teste") });
-        Render(window, "tabs");
+        picker.SelectedValue = "test-model";
+        Assert(!first.RequiresModelSelection && first.Model == "test-model", "Explicit selection resolves unavailable model");
+        var models = new[] { new WindowFloatIA.Auth.ModelChoice("test-model", "GPT de teste") };
+        var originalCount = window.Workspace.Tabs.Count;
+        window.ApplyAccountResult(null, false, null, false, false, Array.Empty<WindowFloatIA.Auth.ModelChoice>(), null);
+        Assert(window.Workspace.Selected == first && first.Draft == "Rascunho preservado" && window.Workspace.Tabs.Count == originalCount,
+            "Cancelling initial login preserves draft and tabs");
+        window.ApplyAccountResult("account-a", true, "account-a", true, false, Array.Empty<WindowFloatIA.Auth.ModelChoice>(), null);
+        Assert(first.Model == "test-model" && picker.Items.Count == 1 && first.Messages.Count > 0,
+            "Closing an unfinished model load preserves catalogue and conversation");
+        window.ApplyAccountResult("account-a", true, "account-a", true, true, models, "removed-model");
+        Assert(first.Model == "test-model", "Stale dialog selection cannot overwrite valid model");
+        window.ApplyAccountResult(null, false, "account-a", true, true, models, "test-model");
+        Assert(window.Workspace.Tabs.Count == 1 && window.Workspace.Selected.Draft == "Rascunho preservado" && window.Workspace.Selected.Model == "test-model",
+            "First successful login preserves pending question and applies model");
+        window.Workspace.Selected.Messages.Add(new ChatMessage("Você", "Privado", "#303030"));
+        window.ApplyAccountResult("account-a", true, "account-b", true, true, models, "test-model");
+        Assert(window.Messages.Count == 0 && window.Workspace.Selected.Draft == "", "Switching accounts clears previous account context");
+        window.ApplyAccountResult("account-b", true, "account-b", false, false, Array.Empty<WindowFloatIA.Auth.ModelChoice>(), null);
+        Assert(picker.Items.Count == 0 && window.Messages.Count == 0, "Sign out clears models and context");
+        foreach (var edge in new[] { "L", "R", "T", "B", "LT", "RT", "LB", "RB" })
+        {
+            window.Width = 700; window.Height = 600; window.Left = 200; window.Top = 200;
+            window.ResizeFromEdge(edge, 10, 15);
+            var expectedWidth = 700 + (edge.Contains('L') ? -10 : edge.Contains('R') ? 10 : 0);
+            var expectedHeight = 600 + (edge.Contains('T') ? -15 : edge.Contains('B') ? 15 : 0);
+            Assert(window.Width == expectedWidth && window.Height == expectedHeight &&
+                window.Left == (edge.Contains('L') ? 210 : 200) && window.Top == (edge.Contains('T') ? 215 : 200), "Resize edge " + edge);
+        }
+
+        Render(window, "account-return");
         Render(new AgentSettingsWindow(new WindowFloatIA.Auth.ChatGptAuth(new System.Net.Http.HttpClient(), new MemoryAuthStore()), ""), "agent-settings");
+        LoginWindowChecks.Run();
         System.Threading.Tasks.Task.Run(AgentChecks.RunAsync).GetAwaiter().GetResult();
         System.Threading.Tasks.Task.Run(AuthChecks.RunAsync).GetAwaiter().GetResult();
         System.Threading.Tasks.Task.Run(WorkspaceChecks.RunAsync).GetAwaiter().GetResult();
