@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using WindowFloatIA;
+using WindowFloatIA.Agents;
 
 internal static class Program
 {
@@ -12,7 +13,7 @@ internal static class Program
     private static void Main()
     {
         // In-process component checks and off-screen rendering; no desktop input automation.
-        var window = new MainWindow(new WindowPreferences());
+        var window = new MainWindow(new WindowPreferences(), new TestAgent());
         var composer = (TextBox)window.FindName("Composer");
         var send = (Button)window.FindName("SendButton");
         var history = (Grid)window.FindName("HistoryPanel");
@@ -23,8 +24,8 @@ internal static class Program
         composer.Text = "Olá! Quero organizar minhas ideias neste chat flutuante.";
         Assert(send.IsEnabled, "Text enables send");
         send.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert(window.Messages.Count == 2, "Send creates user and simulated assistant messages");
-        Assert(window.Messages[1].Author.Contains("simulada"), "Simulation is labeled");
+        Assert(window.Messages.Count == 2, "Send creates user and agent messages");
+        Assert(window.Messages[1].Author == "GPT", "Agent response is labeled");
         Assert(history.Visibility == Visibility.Visible, "Send expands history");
         Assert(composer.Text == "" && !send.IsEnabled, "Composer resets after send");
         Render(window, "expanded");
@@ -33,7 +34,7 @@ internal static class Program
         window.Attachments.Add(new Attachment("C:\\example.txt"));
         composer.Text = "Arquivo para referência";
         send.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert(window.Messages[2].Text.Contains("example.txt") && window.Attachments.Count == 0, "Attachment names retained in message and selection cleared");
+        Assert(!window.Messages[2].Text.Contains("example.txt"), "Local attachments are not sent to text agent");
         for (var i = 0; i < 60; i++)
         {
             composer.Text = "Mensagem " + i;
@@ -44,7 +45,9 @@ internal static class Program
         composer.Text = new string('x', 4000);
         Render(window, "narrow-long-text");
         Assert(composer.ActualHeight <= 120, "Long input has bounded height");
-        Console.WriteLine("PASS: all component checks and three off-screen renders.");
+        Render(new AgentSettingsWindow("", "gpt-5.6-terra"), "agent-settings");
+        System.Threading.Tasks.Task.Run(AgentChecks.RunAsync).GetAwaiter().GetResult();
+        Console.WriteLine("PASS: all component and agent checks; four off-screen renders.");
     }
 
     private static void Assert(bool condition, string message)
@@ -53,13 +56,14 @@ internal static class Program
         Console.WriteLine("PASS: " + message);
     }
 
-    private static void Render(MainWindow window, string name)
+    private static void Render(Window window, string name)
     {
         var content = (FrameworkElement)window.Content;
+        content.UpdateLayout();
+        content.InvalidateMeasure();
         content.Measure(new Size(window.Width, double.PositiveInfinity));
         var height = content.DesiredSize.Height;
         content.Arrange(new Rect(0, 0, window.Width, height));
-        content.UpdateLayout();
         var bitmap = new RenderTargetBitmap((int)Math.Ceiling(window.Width), (int)Math.Ceiling(height), 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(content);
         var encoder = new PngBitmapEncoder();

@@ -6,3 +6,6 @@
 *.suo
 artifacts/
 .dotnet/
+.env
+.env.*
+!.env.example

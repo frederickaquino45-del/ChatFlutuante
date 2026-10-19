@@ -29,7 +29,7 @@
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
    <Grid Background="Transparent" MouseLeftButtonDown="OnDragWindow">
-    <TextBlock Text="WindowFloatIA · demonstração" Foreground="#999999" FontSize="10" VerticalAlignment="Center" IsHitTestVisible="False"/>
+    <TextBlock x:Name="StatusText" Text="Configure o GPT para começar" MaxWidth="210" TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" Foreground="#999999" FontSize="10" VerticalAlignment="Center" IsHitTestVisible="False"/>
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
      <Button x:Name="HistoryButton" Content="⌃" ToolTip="Expandir ou recolher conversa" AutomationProperties.Name="Alternar conversa" Click="OnToggleHistory"/>
      <Button Content="×" FontSize="20" ToolTip="Esconder (Esc)" AutomationProperties.Name="Esconder janela" Click="OnHideClick"/>
@@ -57,7 +57,7 @@
      BorderThickness="0" Padding="0" MinHeight="30" MaxHeight="120" AcceptsReturn="True"
      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="OnTextChanged"
      AutomationProperties.Name="Mensagem"/>
-    <TextBlock x:Name="Placeholder" Text="Digite sua mensagem ou arraste arquivos aqui" Foreground="#BDBDBD"
+    <TextBlock x:Name="Placeholder" Text="Pergunte ao GPT…" Foreground="#BDBDBD"
      IsHitTestVisible="False" Margin="2,2,0,0" TextWrapping="Wrap"/>
    </Grid>
    <ScrollViewer Grid.Row="3" MaxHeight="76" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -75,7 +75,9 @@
    <Grid Grid.Row="4">
     <StackPanel Orientation="Horizontal">
      <TextBlock Text="✦" Foreground="#AAA0FF" FontSize="23" VerticalAlignment="Center" Margin="2,0,10,0"/>
-     <Button Content="+" FontSize="23" ToolTip="Selecionar arquivos locais" AutomationProperties.Name="Adicionar arquivos" Click="OnAddAttachment"/>
+     <Button Content="+" FontSize="23" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="Anexos estarão disponíveis em uma próxima versão" AutomationProperties.Name="Anexos indisponíveis"/>
+     <Button x:Name="SettingsButton" Content="GPT" ToolTip="Configurar chave e modelo" Click="OnSettings"/>
+     <Button x:Name="NewChatButton" Content="Novo" ToolTip="Limpar conversa e contexto" Click="OnNewChat"/>
      <CheckBox Content="Fixar" IsChecked="{Binding Topmost, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="10,0,0,0" ToolTip="Manter acima das outras janelas"/>
     </StackPanel>
     <Button x:Name="SendButton" Content="↑" FontSize="20" HorizontalAlignment="Right" Background="#6257A6"

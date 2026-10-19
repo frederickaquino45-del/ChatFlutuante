@@ -9,6 +9,12 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.Diagnostics;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Text.Json;
+using WindowFloatIA.Agents;
 using Microsoft.Win32;
 
 namespace WindowFloatIA;
@@ -17,7 +23,14 @@ public record Attachment(string Path)
 {
     public string Name => System.IO.Path.GetFileName(Path);
 }
-public record ChatMessage(string Author, string Text, string Background);
+public sealed class ChatMessage(string author, string text, string background) : INotifyPropertyChanged
+{
+    public string Author { get; } = author;
+    public string Background { get; } = background;
+    private string _text = text;
+    public string Text { get => _text; set { _text = value; PropertyChanged?.Invoke(this, new(nameof(Text))); } }
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
 
 public partial class MainWindow : Window
 {
@@ -27,13 +40,22 @@ public partial class MainWindow : Window
     private bool _expanded;
     private bool _ready;
     public bool IsExiting { get; set; }
+    private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
+    private readonly ConversationSession _session = new();
+    private readonly IChatAgent? _testAgent;
+    private CancellationTokenSource? _request;
+    private string _apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+    private string _model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-5.6-terra";
+    public Task CurrentRequest { get; private set; } = Task.CompletedTask;
 
     public MainWindow() : this(WindowPreferences.Load()) { }
 
-    public MainWindow(WindowPreferences settings)
+    public MainWindow(WindowPreferences settings, IChatAgent? agent = null)
     {
         InitializeComponent();
         DataContext = this;
+        _testAgent = agent;
+        StatusText.Text = string.IsNullOrWhiteSpace(_apiKey) ? "Configure o GPT para começar" : "GPT configurado · pronto para enviar";
         Width = settings.Width;
         _historyHeight = settings.HistoryHeight;
         Topmost = settings.Topmost;
@@ -69,7 +91,7 @@ public partial class MainWindow : Window
         if (e.Key == Key.Escape) { Hide(); e.Handled = true; }
         else if (e.Key == Key.Enter && Composer.IsKeyboardFocusWithin && Keyboard.Modifiers == ModifierKeys.None)
         {
-            SendMessage();
+            if (_request is null) CurrentRequest = SendMessageAsync();
             e.Handled = true;
         }
     }
@@ -77,7 +99,7 @@ public partial class MainWindow : Window
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         SavePreferences();
-        if (IsExiting) return;
+        if (IsExiting) { _request?.Cancel(); return; }
         e.Cancel = true;
         Hide();
     }
@@ -97,24 +119,91 @@ public partial class MainWindow : Window
         UpdateSend();
     }
 
-    private void UpdateSend() => SendButton.IsEnabled = !string.IsNullOrWhiteSpace(Composer.Text) || Attachments.Count > 0;
-    private void OnSend(object sender, RoutedEventArgs e) => SendMessage();
-
-    private void SendMessage()
+    private void UpdateSend()
     {
-        if (string.IsNullOrWhiteSpace(Composer.Text) && Attachments.Count == 0) return;
+        SendButton.IsEnabled = _request is not null || !string.IsNullOrWhiteSpace(Composer.Text);
+        SendButton.Content = _request is not null ? "■" : "↑";
+        SendButton.ToolTip = _request is not null ? "Parar resposta" : "Enviar (Enter)";
+        System.Windows.Automation.AutomationProperties.SetName(SendButton, _request is not null ? "Parar resposta" : "Enviar mensagem");
+        SettingsButton.IsEnabled = NewChatButton.IsEnabled = _request is null;
+    }
+    private void OnSend(object sender, RoutedEventArgs e)
+    {
+        if (_request is not null) _request.Cancel();
+        else CurrentRequest = SendMessageAsync();
+    }
+
+    private async Task SendMessageAsync()
+    {
+        if (_request is not null || string.IsNullOrWhiteSpace(Composer.Text)) return;
+        if (_testAgent is null && string.IsNullOrWhiteSpace(_apiKey))
+        {
+            OnSettings(this, new RoutedEventArgs());
+            if (string.IsNullOrWhiteSpace(_apiKey)) return;
+        }
         var text = Composer.Text.Trim();
-        if (Attachments.Count > 0)
-            text += (text.Length > 0 ? "\n\n" : "") + "Anexos locais:\n" + string.Join("\n", Attachments.Select(a => "• " + a.Name));
+        if (text.Length > 16000) { StatusText.Text = "Limite de 16.000 caracteres por pergunta."; return; }
         Messages.Add(new ChatMessage("Você", text, "#37333F"));
-        Messages.Add(new ChatMessage("Assistente · resposta simulada", "Mensagem recebida nesta demonstração. A integração com IA ainda não está conectada; nenhum texto ou arquivo foi enviado para serviços externos.", "#303030"));
-        // Limite explícito para a demonstração não crescer indefinidamente em memória.
+        var answer = new ChatMessage("GPT", "Aguardando resposta…", "#303030");
+        Messages.Add(answer);
         while (Messages.Count > 100) Messages.RemoveAt(0);
         Composer.Clear();
-        Attachments.Clear();
+        using var request = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        _request = request;
         UpdateSend();
         SetExpanded(true);
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => HistoryScroll.ScrollToEnd()));
+        StatusText.Text = "Aguardando GPT…";
+        var partial = "";
+        var paint = Stopwatch.StartNew();
+        try
+        {
+            await _session.AskAsync(_testAgent ?? new OpenAiAgent(Http, _apiKey, _model), text, value =>
+            {
+                partial = value;
+                StatusText.Text = "GPT respondendo…";
+                if (paint.ElapsedMilliseconds < 50) return;
+                answer.Text = value;
+                if (HistoryScroll.ScrollableHeight - HistoryScroll.VerticalOffset < 60) HistoryScroll.ScrollToEnd();
+                paint.Restart();
+            }, request.Token);
+            answer.Text = partial;
+            StatusText.Text = "Concluído · contexto recente mantido";
+        }
+        catch (OperationCanceledException)
+        {
+            answer.Text = partial + "\n\n[Resposta interrompida por cancelamento ou tempo limite.]";
+            StatusText.Text = "Interrompido · você pode enviar outra pergunta";
+        }
+        catch (Exception ex) when (ex is AgentException or HttpRequestException or IOException or JsonException)
+        {
+            var message = ex is AgentException ? ex.Message : "Não foi possível receber a resposta. Verifique a conexão e tente novamente.";
+            answer.Text = partial + "\n\n" + message;
+            StatusText.Text = "Falha · pergunta disponível para tentar novamente";
+            if (string.IsNullOrEmpty(Composer.Text)) Composer.Text = text;
+        }
+        finally
+        {
+            _request = null;
+            UpdateSend();
+        }
+        FocusComposer();
+    }
+
+    private void OnSettings(object sender, RoutedEventArgs e)
+    {
+        var settings = new AgentSettingsWindow(_apiKey, _model) { Owner = this };
+        if (settings.ShowDialog() != true) return;
+        _apiKey = settings.ApiKey;
+        _model = settings.Model;
+        StatusText.Text = string.IsNullOrWhiteSpace(_apiKey) ? "GPT desconectado" : "GPT configurado · conexão será validada ao enviar";
+    }
+    private void OnNewChat(object sender, RoutedEventArgs e)
+    {
+        if (_request is not null) return;
+        _session.Clear();
+        Messages.Clear();
+        SetExpanded(false);
+        StatusText.Text = "Nova conversa · contexto limpo";
         FocusComposer();
     }
 
@@ -151,12 +240,12 @@ public partial class MainWindow : Window
     }
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Effects = DragDropEffects.None;
         e.Handled = true;
     }
     private void OnDrop(object sender, DragEventArgs e)
     {
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] paths) AddFiles(paths);
+        StatusText.Text = "O agente aceita apenas texto nesta versão.";
         e.Handled = true;
     }
     private void OnWidthResize(object sender, DragDeltaEventArgs e) => Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, 900);
