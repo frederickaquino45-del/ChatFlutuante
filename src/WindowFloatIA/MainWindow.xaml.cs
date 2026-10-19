@@ -33,6 +33,9 @@ public partial class MainWindow : Window
     private double _compactWidth, _compactHeight, _expandedWidth, _expandedHeight;
     private string _lastModel;
     private string _theme, _accent;
+    private readonly ChatHistoryStore _history = new();
+    private string? _historyAccount;
+    private readonly DispatcherTimer _historyTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly CancellationTokenSource _lifetime = new();
 
     public MainWindow() : this(WindowPreferences.Load()) { }
@@ -64,9 +67,16 @@ public partial class MainWindow : Window
             WindowStartupLocation = WindowStartupLocation.Manual;
             Left = left; Top = top;
         }
+        _historyTimer.Tick += (_, _) => { _historyTimer.Stop(); SaveHistory(); };
+        if (agent is null && _auth?.IsSignedIn == true)
+        {
+            _historyAccount = _auth.Selected!.ClientId;
+            RestoreHistory();
+        }
         Workspace.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ChatWorkspace.Selected)) DisplaySelected(); };
         Workspace.ContentChanged += tab =>
         {
+            if (!tab.IsBusy) QueueHistorySave();
             if (tab != Workspace.Selected) return;
             ApplyExpanded(tab.Expanded);
             QueueScroll();
@@ -130,6 +140,7 @@ public partial class MainWindow : Window
     }
     private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(ChatTab.Draft) or nameof(ChatTab.Model)) QueueHistorySave();
         if (e.PropertyName == nameof(ChatTab.Draft) && Composer.Text != Workspace.Selected.Draft)
         {
             _syncing = true; Composer.Text = Workspace.Selected.Draft; _syncing = false;
@@ -144,12 +155,12 @@ public partial class MainWindow : Window
     private void OnCloseTab(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
-        if (sender is Button { Tag: ChatTab tab }) Workspace.Close(tab);
+        if (sender is Button { Tag: ChatTab tab }) { SaveHistory(); Workspace.Close(tab); }
     }
     private void OnTextChanged(object sender, TextChangedEventArgs e)
     {
         if (SendButton is null) return;
-        if (!_syncing) Workspace.Selected.Draft = Composer.Text;
+        if (!_syncing) { Workspace.Selected.Draft = Composer.Text; Workspace.Selected.Updated = DateTime.UtcNow; }
         UpdateControls();
     }
     private void UpdateControls()
@@ -269,13 +280,19 @@ public partial class MainWindow : Window
     internal void ApplyAccountResult(string? previous, bool wasSignedIn, string? current, bool signedIn,
         bool modelsLoaded, IReadOnlyList<ModelChoice> models, string? chosenModel)
     {
+        if (_testAgent is null && _historyAccount != (signedIn ? current : null))
+        {
+            SaveHistory();
+            _historyAccount = signedIn ? current : null;
+        }
         var accountChanged = previous != current;
         var signedOut = wasSignedIn && !signedIn;
         var draft = Workspace.Selected.Draft;
-        if (accountChanged || signedOut)
+        if (accountChanged || signedOut || (!wasSignedIn && signedIn))
         {
             Workspace.Reset();
-            if (!wasSignedIn && signedIn) Workspace.Selected.Draft = draft;
+            if (signedIn && _testAgent is null) RestoreHistory();
+            if (!wasSignedIn && signedIn && draft.Length > 0) Workspace.Selected.Draft = draft;
         }
         // Closing/cancelling the dialog must not discard a valid catalogue or draft.
         if (signedIn && modelsLoaded) SetModels(models);
@@ -408,12 +425,30 @@ public partial class MainWindow : Window
     private void OnClosing(object? sender, CancelEventArgs e)
     {
         SavePreferences();
-        if (IsExiting) { _lifetime.Cancel(); Workspace.CancelAll(); return; }
+        if (IsExiting) { _historyTimer.Stop(); _lifetime.Cancel(); Workspace.CancelAll(); return; }
         e.Cancel = true; Hide();
+    }
+    private void QueueHistorySave()
+    {
+        if (_testAgent is not null || _historyAccount is null) return;
+        _historyTimer.Stop(); _historyTimer.Start();
+    }
+    private void SaveHistory()
+    {
+        if (_testAgent is not null || _historyAccount is null) return;
+        try { _history.Save(_historyAccount, Workspace.Tabs); }
+        catch { Workspace.Selected.Status = "Nao foi possivel salvar o historico local."; }
+    }
+    private void RestoreHistory()
+    {
+        if (_historyAccount is null) return;
+        try { _history.Restore(_historyAccount, Workspace); }
+        catch { Workspace.Selected.Status = "Nao foi possivel restaurar o historico local."; }
     }
     public void SavePreferences()
     {
         if (_testAgent is not null) return;
+        SaveHistory();
         RememberSize();
         WindowPreferences.Save(new WindowPreferences(double.IsFinite(Left) ? Left : null, double.IsFinite(Top) ? Top : null,
             _compactWidth, 300, Topmost, _compactHeight, _expandedWidth, _expandedHeight, _lastModel, _theme, _accent));

@@ -53,7 +53,7 @@ public sealed class AuthStore : IAuthStore
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }
     [StructLayout(LayoutKind.Sequential)] private struct Blob { public int Length; public IntPtr Data; }
-    private static byte[] Transform(byte[] bytes, bool protect)
+    internal static byte[] Transform(byte[] bytes, bool protect)
     {
         var input = new Blob { Length = bytes.Length, Data = Marshal.AllocHGlobal(bytes.Length) };
         var output = new Blob();

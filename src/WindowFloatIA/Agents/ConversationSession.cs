@@ -44,6 +44,17 @@ public sealed class ConversationSession
         foreach (var message in _history) total += message.Content.Length;
         return total;
     }
+    public List<AgentMessage> Export() => new(_history);
+    public void Restore(IReadOnlyList<AgentMessage> messages)
+    {
+        Clear();
+        for (var i = 0; i + 1 < messages.Count; i += 2)
+        {
+            if (messages[i].Role != "user" || messages[i + 1].Role != "assistant") continue;
+            _history.Add(messages[i]); _history.Add(messages[i + 1]);
+        }
+        while (_history.Count > 20 || TotalCharacters() > 64000) _history.RemoveRange(0, 2);
+    }
     public void Clear()
     {
         if (IsBusy) throw new InvalidOperationException("Aguarde ou cancele a resposta antes de limpar.");

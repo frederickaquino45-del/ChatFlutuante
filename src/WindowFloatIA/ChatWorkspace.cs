@@ -24,6 +24,8 @@ public sealed class ChatMessage(string author, string text, string background) :
 public sealed class ChatTab : ObservableState
 {
     public ObservableCollection<ChatMessage> Messages { get; } = new();
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public DateTime Updated { get; set; } = DateTime.UtcNow;
     public ConversationSession Session { get; } = new();
     public CancellationTokenSource? Request { get; set; }
     public Task CurrentRequest { get; set; } = Task.CompletedTask;
@@ -87,6 +89,7 @@ public sealed class ChatWorkspace : ObservableState
     }
     private async Task SendCoreAsync(ChatTab tab, IChatAgent agent)
     {
+        tab.Updated = DateTime.UtcNow;
         var text = tab.Draft.Trim();
         if (text.Length > 16000) { tab.Status = "Limite de 16.000 caracteres por pergunta."; return; }
         if (tab.Messages.Count == 0)

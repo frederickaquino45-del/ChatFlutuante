@@ -54,7 +54,7 @@ Validação manual: abrir/esconder com outro aplicativo em foco, testar Esc e fe
 - Estado compacto e histórico expansível. O envio abre a conversa; o botão no topo recolhe sem apagar.
 - Enter envia; Shift + Enter insere uma nova linha. O campo cresce até 120 pixels e depois permite rolagem.
 - A conexão GPT aceita apenas texto nesta versão. O botão + Novo cria uma conversa; arrastar arquivos não faz upload.
-- O histórico visual mantém as últimas 100 mensagens em memória e é descartado ao encerrar.
+- O histórico visual mantém as últimas 100 mensagens por conversa. Até cinco conversas recentes são salvas localmente e restauradas ao abrir.
 - Arraste a faixa superior para mover; todas as bordas e cantos ajustam largura e altura, respeitando dimensões mínimas. O histórico ocupa o espaço livre, mantendo a entrada na parte inferior.
 - Posição, dimensões independentes dos modos compacto/expandido, último modelo e opção Fixar são salvos em `%LOCALAPPDATA%/WindowFloatIA/window.json`. Preferências ausentes ou inválidas usam os valores padrão.
 - A janela ajusta sua posição à área útil do monitor ao abrir e em alterações de tela/DPI.
@@ -96,17 +96,17 @@ A mesma suíte testa PKCE com vetor RFC, callback HTTP local, state incorreto, c
 
 - `IChatAgent` define o contrato para futuros provedores; `OpenAiAgent` implementa a chamada HTTPS/SSE usando HttpClient, sem dependências externas.
 - `ConversationSession` mantém até dez pares de pergunta/resposta concluídos, limitados também a 64.000 caracteres. Cada pergunta aceita até 16.000 caracteres; o envio inclui esse contexto recente. Esses limites são em caracteres, não tokens.
-- A API recebe `store: false`; isso não é uma promessa de retenção zero de dados pelo provedor. O aplicativo não persiste a conversa localmente.
+- A API recebe `store: false`; isso não é uma promessa de retenção zero de dados pelo provedor. O aplicativo mantém até cinco conversas recentes em armazenamento local protegido pelo Windows.
 - O botão de envio vira **Parar**. Esconder a janela mantém a requisição ativa; sair solicita seu cancelamento. Interromper a conexão não garante reversão de processamento/cobrança já ocorridos no servidor.
 - Texto parcial é preservado em falhas e cancelamentos, mas não entra no contexto seguinte. Não há repetição automática. Em erros, o campo recupera a pergunta se você não tiver começado outro rascunho.
 - **+ Novo** abre uma aba independente com histórico, contexto, rascunho, modelo, posição de rolagem e cancelamento próprios. Fechar uma aba cancela somente a resposta dela. Fechar a última cria uma nova conversa vazia.
 - Trocar de aba não interrompe respostas. Um indicador sinaliza execução e conteúdo novo nas outras abas. O título é derivado localmente da primeira pergunta, sem chamada adicional à IA.
 - Durante uma resposta, apenas a troca de modelo dessa aba fica bloqueada. Outras abas podem enviar perguntas; a configuração de conta permanece bloqueada enquanto qualquer aba responde para evitar misturar contas.
 - A rolagem acompanha a resposta quando o leitor está próximo ao final. Rolar para cima suspende esse acompanhamento; **↓ Ir para o final** retoma. As atualizações de rolagem são agrupadas e executadas após o layout.
-- Abas e mensagens continuam apenas na memória: são preservadas ao esconder a janela, mas não ao encerrar o processo. A sessão OAuth e as preferências permanecem salvas.
+- Até cinco conversas recentes por conta são restauradas ao reabrir, com mensagens, rascunho, modelo e contexto concluído. Fechar uma aba preserva seu histórico; conversas mais antigas saem do armazenamento quando excedem o limite de cinco. Os arquivos ficam em `%LOCALAPPDATA%/WindowFloatIA/history`, cifrados com DPAPI. Respostas interrompidas não entram no contexto enviado ao agente.
 - O primeiro agente somente responde por texto: não tem ferramentas, acesso ao computador, uploads, pesquisa na web ou ações externas.
 
-Histórico persistente, anexos para IA, ferramentas, comando de voz e inicialização automática ficam para próximas etapas.
+Anexos para IA, ferramentas, comando de voz e inicialização automática ficam para próximas etapas.
 
 ## Aparencia e configuracoes
 

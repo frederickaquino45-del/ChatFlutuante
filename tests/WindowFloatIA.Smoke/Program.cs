@@ -137,6 +137,7 @@ internal static class Program
         ((ComboBox)preferences.FindName("AccentPreference")).SelectedIndex = 1;
         Assert(savedPin == false && savedTheme == "Claro" && savedAccent == "Azul", "Preferences apply pin, theme and accent immediately");
         Render(preferences, "preferences-light");
+        System.Threading.Tasks.Task.Run(HistoryChecks.RunAsync).GetAwaiter().GetResult();
         LoginWindowChecks.Run();
         System.Threading.Tasks.Task.Run(AgentChecks.RunAsync).GetAwaiter().GetResult();
         System.Threading.Tasks.Task.Run(AuthChecks.RunAsync).GetAwaiter().GetResult();
