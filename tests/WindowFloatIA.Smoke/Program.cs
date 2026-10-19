@@ -45,8 +45,9 @@ internal static class Program
         composer.Text = new string('x', 4000);
         Render(window, "narrow-long-text");
         Assert(composer.ActualHeight <= 120, "Long input has bounded height");
-        Render(new AgentSettingsWindow("", "gpt-5.6-terra"), "agent-settings");
+        Render(new AgentSettingsWindow(new WindowFloatIA.Auth.ChatGptAuth(new System.Net.Http.HttpClient(), new MemoryAuthStore()), ""), "agent-settings");
         System.Threading.Tasks.Task.Run(AgentChecks.RunAsync).GetAwaiter().GetResult();
+        System.Threading.Tasks.Task.Run(AuthChecks.RunAsync).GetAwaiter().GetResult();
         Console.WriteLine("PASS: all component and agent checks; four off-screen renders.");
     }
 

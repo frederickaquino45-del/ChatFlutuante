@@ -8,26 +8,26 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace WindowFloatIA.Agents;
 
 public sealed class AgentException(string message) : Exception(message);
 
-public sealed class OpenAiAgent(HttpClient client, string apiKey, string model) : IChatAgent
+public sealed class OpenAiAgent(HttpClient client, Func<CancellationToken, Task<string>> getAccessToken, string model) : IChatAgent
 {
     public async IAsyncEnumerable<string> StreamAsync(IReadOnlyList<AgentMessage> messages,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(apiKey)) throw new AgentException("Configure sua chave de API no botão GPT.");
-        if (apiKey.Contains('\r') || apiKey.Contains('\n')) throw new AgentException("A chave de API não pode conter quebras de linha.");
+        var accessToken = await getAccessToken(cancellationToken);
+        if (string.IsNullOrWhiteSpace(accessToken)) throw new AgentException("Entre com ChatGPT no botão GPT.");
         using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/responses");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Content = new StringContent(JsonSerializer.Serialize(new
         {
             model,
             stream = true,
             store = false,
-            max_output_tokens = 4096,
             instructions = "Você é o assistente do WindowFloatIA. Responda em português, de forma clara e objetiva. Você não tem acesso ao computador nem a arquivos locais e não pode executar ações.",
             input = messages.Select(m => new { role = m.Role, content = m.Content })
         }), Encoding.UTF8, "application/json");
@@ -35,10 +35,10 @@ public sealed class OpenAiAgent(HttpClient client, string apiKey, string model) 
         if (!response.IsSuccessStatusCode)
             throw new AgentException((int)response.StatusCode switch
             {
-                401 => "Chave de API inválida ou expirada. Confira a configuração do GPT.",
+                401 => "Sessão expirada ou revogada. Entre novamente com ChatGPT no botão GPT.",
                 403 => "Sua conta não tem permissão para esta solicitação.",
                 404 => "Modelo indisponível. Confira o nome e o acesso da sua conta.",
-                429 => "Limite de uso ou saldo da API atingido. Confira sua conta e tente novamente depois.",
+                429 => "Limite de uso atingido. Confira seu plano ChatGPT e tente novamente depois.",
                 >= 500 => "A OpenAI está temporariamente indisponível. Tente novamente depois.",
                 _ => $"A API recusou a solicitação (HTTP {(int)response.StatusCode}). Confira o modelo e o tamanho da conversa."
             });

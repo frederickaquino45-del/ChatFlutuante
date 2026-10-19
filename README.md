@@ -70,14 +70,25 @@ Executa verificações dos componentes WPF e do adaptador HTTP com dados simulad
 ## Conectar o primeiro agente GPT
 
 1. Execute o aplicativo e clique em **GPT**.
-2. Informe uma chave de API da sua conta OpenAI e um modelo disponível nessa conta.
-3. Clique em **Aplicar**, digite uma pergunta e pressione Enter.
+2. Clique em **Continue with ChatGPT** e conclua o login e o consentimento no navegador do sistema.
+3. Escolha um dos modelos retornados para sua conta e clique em **Usar modelo e voltar ao chat**.
+4. Digite a pergunta e pressione Enter.
 
-O modelo inicial é `gpt-5.6-terra`, editável na tela. A configuração só é validada pela API ao enviar a primeira pergunta. A chave fica na memória do processo e não é gravada nas preferências, no histórico ou em logs. Apagar a chave e aplicar desconecta o agente; encerrar libera a sessão. Não compartilhe sua chave no chat ou em commits.
+A autenticação utiliza OAuth 2 Authorization Code + PKCE e OpenID Connect, pelo fluxo oficial [Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). Não é necessário digitar chave de API; `OPENAI_API_KEY` e `OPENAI_MODEL` não são usados. OAuth ainda utiliza tokens internamente, obtidos e renovados automaticamente após autorização.
 
-Opcionalmente, o aplicativo lê `OPENAI_API_KEY` e `OPENAI_MODEL` do ambiente ao iniciar. Arquivos `.env` não são carregados pelo aplicativo. Não inclua uma chave compartilhada no executável: esta conexão direta é destinada ao uso local com a chave do próprio usuário. Uma distribuição com credenciais compartilhadas exigiria um backend.
+- O navegador retorna para um listener temporário ligado apenas a `127.0.0.1`, em uma porta disponível e caminho `/auth/callback`. O mesmo endereço é enviado na autorização e na troca do código. O listener fecha ao concluir, cancelar ou após cinco minutos.
+- Cada tentativa usa `state`, `nonce` e verifier aleatórios. A identidade é verificada por assinatura RSA/SHA-256 contra o JWKS do emissor, issuer, audience, validade e nonce; a permissão `chatgpt.tokens.use.direct` é necessária para perguntas.
+- O primeiro login utiliza registro dinâmico com o nome real do aplicativo. O client ID emitido é guardado por conta; logins seguintes reutilizam esse registro e o identificador estável deste host. Não há client secret embutido nem reutilização de credenciais do Codex.
+- Credenciais e registros ficam em `%LOCALAPPDATA%/WindowFloatIA/oauth.dat`, cifrados com DPAPI para o usuário atual do Windows e atualizados por substituição de arquivo. Não copie esse arquivo para outros computadores/usuários. Nunca registre seu conteúdo em logs ou commits.
+- A janela de conexão permite selecionar contas registradas, adicionar outra conta/workspace e desconectar. Trocar a conta ativa limpa o contexto da conversa para evitar enviá-lo a outra conta.
+- A renovação é serializada antes da expiração, persistindo o refresh token substituto. Falha de renovação ou revogação solicita novo login; perguntas não são reenviadas automaticamente.
+- Desconectar tenta revogar a sessão remota e sempre remove os tokens locais. Caso a revogação não seja confirmada, a interface orienta desconectar também nas configurações do ChatGPT. O registro da conta e o host são mantidos para reautorização.
 
-O acesso é via API, não usa a sessão deste chat/Codex. As solicitações utilizam a conta e o saldo associados à chave. A implementação segue a [Responses API com streaming](https://developers.openai.com/api/docs/guides/streaming-responses). Consulte também o [modelo configurado inicialmente](https://developers.openai.com/api/docs/models/gpt-5.6-terra).
+Modelos são obtidos do catálogo da conta, preservando a ordem e filtrando `visibility: list`. A chamada usa o endpoint público Responses com `store: false`, `stream: true` e histórico em `input`, sem parâmetros incompatíveis como `max_output_tokens` ou `previous_response_id`. Veja [modelos e inferência](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference) e [limitações do fluxo](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations). Disponibilidade e uso dependem das permissões e limites do plano/workspace autorizado.
+
+### Testes OAuth
+
+A mesma suíte testa PKCE com vetor RFC, callback HTTP local, state incorreto, consentimento negado, client ID incompatível, JWT assinado e adulterado, audience/issuer/nonce/expiração, renovação concorrente, catálogo da conta, revogação e armazenamento DPAPI. Os testes não abrem um navegador, não autorizam contas e não usam tokens reais. O primeiro login e uma resposta real precisam ser validados interativamente pelo usuário.
 
 ### Fluxo e limites
 

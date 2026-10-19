@@ -15,6 +15,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
 using WindowFloatIA.Agents;
+using WindowFloatIA.Auth;
 using Microsoft.Win32;
 
 namespace WindowFloatIA;
@@ -44,8 +45,8 @@ public partial class MainWindow : Window
     private readonly ConversationSession _session = new();
     private readonly IChatAgent? _testAgent;
     private CancellationTokenSource? _request;
-    private string _apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
-    private string _model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-5.6-terra";
+    private ChatGptAuth? _auth;
+    private string _model = "";
     public Task CurrentRequest { get; private set; } = Task.CompletedTask;
 
     public MainWindow() : this(WindowPreferences.Load()) { }
@@ -55,7 +56,12 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = this;
         _testAgent = agent;
-        StatusText.Text = string.IsNullOrWhiteSpace(_apiKey) ? "Configure o GPT para começar" : "GPT configurado · pronto para enviar";
+        StatusText.Text = "Entre com ChatGPT para começar";
+        if (agent is null)
+        {
+            try { _auth = new ChatGptAuth(Http, new AuthStore()); }
+            catch { StatusText.Text = "Não foi possível ler a sessão protegida"; }
+        }
         Width = settings.Width;
         _historyHeight = settings.HistoryHeight;
         Topmost = settings.Topmost;
@@ -136,10 +142,10 @@ public partial class MainWindow : Window
     private async Task SendMessageAsync()
     {
         if (_request is not null || string.IsNullOrWhiteSpace(Composer.Text)) return;
-        if (_testAgent is null && string.IsNullOrWhiteSpace(_apiKey))
+        if (_testAgent is null && (_auth?.IsSignedIn != true || string.IsNullOrEmpty(_model)))
         {
             OnSettings(this, new RoutedEventArgs());
-            if (string.IsNullOrWhiteSpace(_apiKey)) return;
+            if (_auth?.IsSignedIn != true || string.IsNullOrEmpty(_model)) return;
         }
         var text = Composer.Text.Trim();
         if (text.Length > 16000) { StatusText.Text = "Limite de 16.000 caracteres por pergunta."; return; }
@@ -157,7 +163,7 @@ public partial class MainWindow : Window
         var paint = Stopwatch.StartNew();
         try
         {
-            await _session.AskAsync(_testAgent ?? new OpenAiAgent(Http, _apiKey, _model), text, value =>
+            await _session.AskAsync(_testAgent ?? new OpenAiAgent(Http, _auth!.GetAccessTokenAsync, _model), text, value =>
             {
                 partial = value;
                 StatusText.Text = "GPT respondendo…";
@@ -174,7 +180,7 @@ public partial class MainWindow : Window
             answer.Text = partial + "\n\n[Resposta interrompida por cancelamento ou tempo limite.]";
             StatusText.Text = "Interrompido · você pode enviar outra pergunta";
         }
-        catch (Exception ex) when (ex is AgentException or HttpRequestException or IOException or JsonException)
+        catch (Exception ex)
         {
             var message = ex is AgentException ? ex.Message : "Não foi possível receber a resposta. Verifique a conexão e tente novamente.";
             answer.Text = partial + "\n\n" + message;
@@ -191,11 +197,22 @@ public partial class MainWindow : Window
 
     private void OnSettings(object sender, RoutedEventArgs e)
     {
-        var settings = new AgentSettingsWindow(_apiKey, _model) { Owner = this };
-        if (settings.ShowDialog() != true) return;
-        _apiKey = settings.ApiKey;
-        _model = settings.Model;
-        StatusText.Text = string.IsNullOrWhiteSpace(_apiKey) ? "GPT desconectado" : "GPT configurado · conexão será validada ao enviar";
+        try
+        {
+            _auth ??= new ChatGptAuth(Http, new AuthStore());
+            var previous = _auth.Selected?.ClientId;
+            var settings = new AgentSettingsWindow(_auth, _model) { Owner = this };
+            var applied = settings.ShowDialog() == true;
+            if (_auth.Selected?.ClientId != previous || !_auth.IsSignedIn)
+            {
+                _session.Clear();
+                Messages.Clear();
+                _model = "";
+            }
+            if (applied) _model = settings.Model;
+            StatusText.Text = _auth.IsSignedIn ? "ChatGPT conectado · " + _auth.Selected!.Email : "ChatGPT desconectado";
+        }
+        catch { StatusText.Text = "Não foi possível acessar a sessão protegida do Windows."; }
     }
     private void OnNewChat(object sender, RoutedEventArgs e)
     {

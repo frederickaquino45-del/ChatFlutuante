@@ -48,7 +48,7 @@ internal static class AgentChecks
     {
         var handler = new FakeHttp { Payload = ": keepalive\n\n" + Event("response.created") + Event("response.output_text.delta", "Olá ") + Event("response.output_text.delta", "mundo") + Event("response.completed") };
         using var http = new HttpClient(handler);
-        var agent = new OpenAiAgent(http, "test-key-not-real", "test-model");
+        var agent = new OpenAiAgent(http, _ => Task.FromResult("test-key-not-real"), "test-model");
         var session = new ConversationSession();
         var output = "";
         await session.AskAsync(agent, "Primeira pergunta", text => output = text, default);
@@ -56,6 +56,7 @@ internal static class AgentChecks
         using (var request = JsonDocument.Parse(handler.Body))
         {
             Check(!request.RootElement.GetProperty("store").GetBoolean() && request.RootElement.GetProperty("stream").GetBoolean(), "Streaming enabled and response storage disabled");
+            Check(!request.RootElement.TryGetProperty("max_output_tokens", out _), "OAuth request omits unsupported max_output_tokens");
             Check(handler.Auth == "Bearer" && !handler.Body.Contains("test-key"), "Credential stays in authorization header");
         }
         await session.AskAsync(agent, "Segunda pergunta", _ => { }, default);
