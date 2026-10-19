@@ -129,12 +129,12 @@ internal static class Program
         bool? savedPin = null; string? savedTheme = null; string? savedAccent = null;
         var preferences = new PreferencesWindow(true, "Escuro", "Violeta", () => { }, (pin, theme, accent) => { savedPin = pin; savedTheme = theme; savedAccent = accent; });
         Render(preferences, "preferences");
-        var preferencePanel = (StackPanel)((ScrollViewer)preferences.Content).Content;
-        foreach (var child in preferencePanel.Children)
-        {
-            if (child is CheckBox pinControl) pinControl.IsChecked = false;
-            if (child is ComboBox choice) choice.SelectedIndex = 1;
-        }
+        ((Button)preferences.FindName("WindowNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Render(preferences, "preferences-window");
+        ((CheckBox)preferences.FindName("PinPreference")).IsChecked = false;
+        ((Button)preferences.FindName("AppearanceNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        ((ComboBox)preferences.FindName("ThemePreference")).SelectedIndex = 1;
+        ((ComboBox)preferences.FindName("AccentPreference")).SelectedIndex = 1;
         Assert(savedPin == false && savedTheme == "Claro" && savedAccent == "Azul", "Preferences apply pin, theme and accent immediately");
         Render(preferences, "preferences-light");
         LoginWindowChecks.Run();
