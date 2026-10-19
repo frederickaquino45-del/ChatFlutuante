@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -9,7 +9,7 @@ internal sealed class PreferencesWindow : Window
     public PreferencesWindow(bool pinned, string theme, string accent, Action accounts, Action<bool, string, string> changed, Action? connections = null)
     {
         Title = "Configurações · WindowFloatIA";
-        Width = 680; Height = 480; MinWidth = 600; MinHeight = 400;
+        Width = 760; Height = 560; MinWidth = 700; MinHeight = 400;
         NameScope.SetNameScope(this, new NameScope());
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/WindowFloatIA;component/Controls.xaml", UriKind.Relative) });
@@ -17,7 +17,7 @@ internal sealed class PreferencesWindow : Window
         SetResourceReference(BackgroundProperty, "ShellBrush");
         var root = new Grid();
         root.SetResourceReference(Panel.BackgroundProperty, "ShellBrush");
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(190) });
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(215) });
         root.ColumnDefinitions.Add(new ColumnDefinition());
         Content = root;
         var sidebar = new StackPanel { Margin = new Thickness(12, 24, 12, 12) };
@@ -36,6 +36,7 @@ internal sealed class PreferencesWindow : Window
         var accountPage = new StackPanel();
         var windowPage = new StackPanel();
         var appearancePage = new StackPanel();
+        var systemPage = new StackPanel();
         var navigation = new System.Collections.Generic.List<Button>();
         void Navigate(Button selected, StackPanel page)
         {
@@ -64,9 +65,14 @@ internal sealed class PreferencesWindow : Window
         group.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); sidebar.Children.Add(group);
         Link("WindowNavigation", "\uE737", "Modo janela", windowPage, true);
         Link("AppearanceNavigation", "\uE790", "Apar\u00eancia", appearancePage, true);
+        Link("SystemNavigation", "\uE713", "Inicialização e atalho", systemPage, true);
+        var brand = new Image { Source = WindowBranding.Image("agents.png"), Width = 52, Height = 52, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(10, 18, 0, 0) };
+        sidebar.Children.Add(brand);
         var panel = accountPage;
         void Heading(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 17, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 16, 0, 10) });
         void Description(string text) { var block = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) }; block.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); panel.Children.Add(block); }
+        var logo = new Image { Source = WindowBranding.Image(theme == "Claro" ? "logo-flat.png" : "logo.png"), Height = 80, Stretch = System.Windows.Media.Stretch.Uniform };
+        panel.Children.Add(new Border { Background = System.Windows.Media.Brushes.WhiteSmoke, CornerRadius = new CornerRadius(10), Padding = new Thickness(8), Child = logo });
         Heading("Conta");
         Description("Configure suas conexões. Escolha a conexão e o modelo no rodapé de cada chat.");
         var account = new Button { Content = "Gerenciar contas e modelos do ChatGPT", Padding = new Thickness(12), ToolTip = "Conectar, trocar ou desconectar uma conta e consultar seus modelos" };
@@ -85,6 +91,44 @@ internal sealed class PreferencesWindow : Window
         var pin = new CheckBox { Content = "Manter acima de outras janelas", IsChecked = pinned, ToolTip = "Mantém o chat visível sobre os outros aplicativos", Margin = new Thickness(0, 0, 0, 8) };
         pin.SetResourceReference(ForegroundProperty, "TextBrush"); panel.Children.Add(pin);
         RegisterName("PinPreference", pin);
+        panel = systemPage;
+        Heading("Inicialização");
+        Description("Abra o aplicativo na bandeja ao entrar no Windows. Mantenha o executável na mesma pasta após ativar esta opção.");
+        var startup = new CheckBox { Content = "Iniciar junto com o Windows", Margin = new Thickness(0, 0, 0, 16) };
+        startup.SetResourceReference(ForegroundProperty, "TextBrush");
+        var feedback = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 0) };
+        try { startup.IsChecked = WindowsStartup.Enabled; }
+        catch { startup.IsEnabled = false; feedback.Text = "Não foi possível consultar a inicialização do Windows."; }
+        panel.Children.Add(startup); RegisterName("StartupPreference", startup);
+        bool updating = false;
+        startup.Click += (_, _) =>
+        {
+            if (updating) return;
+            try { WindowsStartup.Set(startup.IsChecked == true); feedback.Text = startup.IsChecked == true ? "Inicialização ativada na bandeja." : "Inicialização desativada."; }
+            catch (Exception) { updating = true; startup.IsChecked = startup.IsChecked != true; updating = false; feedback.Text = "Não foi possível alterar a inicialização. Abra o WindowFloatIA.exe em uma pasta permanente e tente novamente."; }
+        };
+        Heading("Atalho de abertura");
+        Description("Clique no campo e pressione Ctrl, Alt, Shift ou Win junto de uma letra, número, espaço ou F1–F12. Depois clique em Aplicar.");
+        var selectedShortcut = DesktopPreferences.Load();
+        var shortcut = new TextBox { Text = selectedShortcut.Label, IsReadOnly = true, MinHeight = 34, Padding = new Thickness(8), ToolTip = "Pressione a combinação desejada" };
+        shortcut.SetResourceReference(BackgroundProperty, "SurfaceBrush"); shortcut.SetResourceReference(ForegroundProperty, "TextBrush");
+        panel.Children.Add(shortcut); RegisterName("ShortcutPreference", shortcut);
+        shortcut.PreviewKeyDown += (_, e) =>
+        {
+            var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+            if (key == System.Windows.Input.Key.Tab) return;
+            e.Handled = true;
+            var modifiers = (uint)System.Windows.Input.Keyboard.Modifiers;
+            var vk = (uint)System.Windows.Input.KeyInterop.VirtualKeyFromKey(key);
+            if (DesktopPreferences.Valid(modifiers, vk)) { selectedShortcut = new DesktopPreferences(modifiers, vk); shortcut.Text = selectedShortcut.Label; feedback.Text = "Clique em Aplicar atalho para confirmar."; }
+            else feedback.Text = "Use modificadores junto de uma letra, número, espaço ou F1–F12.";
+        };
+        var applyShortcut = new Button { Content = "Aplicar atalho", Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(10) };
+        applyShortcut.Click += (_, _) => feedback.Text = Application.Current is App app ? app.ChangeHotKey(selectedShortcut) ?? "Atalho atualizado." : "Abra o aplicativo para registrar o atalho.";
+        panel.Children.Add(applyShortcut);
+        var resetShortcut = new Button { Content = "Restaurar Ctrl + Alt + Espaço", Margin = new Thickness(0, 8, 0, 0), Padding = new Thickness(10) };
+        resetShortcut.Click += (_, _) => { selectedShortcut = new(); shortcut.Text = selectedShortcut.Label; feedback.Text = "Clique em Aplicar atalho para confirmar."; };
+        panel.Children.Add(resetShortcut); panel.Children.Add(feedback);
         panel = appearancePage;
         Heading("Aparência");
         Description("As alterações são aplicadas imediatamente e salvas neste computador.");
@@ -93,7 +137,7 @@ internal sealed class PreferencesWindow : Window
         panel.Children.Add(new TextBlock { Text = "Cor de destaque", Margin = new Thickness(0, 12, 0, 6) });
         var accents = new ComboBox { ItemsSource = new[] { "Violeta", "Azul", "Verde" }, SelectedItem = accent is "Azul" or "Verde" ? accent : "Violeta", ToolTip = "Cor dos ícones, seleção de abas e botão de envio" }; panel.Children.Add(accents);
         RegisterName("ThemePreference", themes); RegisterName("AccentPreference", accents);
-        void Apply() { var t = (string)themes.SelectedItem; var a = (string)accents.SelectedItem; Appearance.Apply(this, t, a); changed(pin.IsChecked == true, t, a); }
+        void Apply() { var t = (string)themes.SelectedItem; var a = (string)accents.SelectedItem; Appearance.Apply(this, t, a); logo.Source = WindowBranding.Image(t == "Claro" ? "logo-flat.png" : "logo.png"); changed(pin.IsChecked == true, t, a); }
         pin.Checked += (_, _) => Apply(); pin.Unchecked += (_, _) => Apply();
         themes.SelectionChanged += (_, _) => Apply(); accents.SelectionChanged += (_, _) => Apply();
         var close = new Button { Content = "Concluído", Padding = new Thickness(12), Margin = new Thickness(0, 24, 0, 0), ToolTip = "Voltar ao chat" }; close.SetResourceReference(BackgroundProperty, "SelectedBrush"); close.Click += (_, _) => Close(); Grid.SetRow(close, 1); body.Children.Add(close);

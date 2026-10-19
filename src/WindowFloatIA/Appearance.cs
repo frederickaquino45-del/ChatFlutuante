@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Media;
 
@@ -21,5 +21,6 @@ internal static class Appearance
         Set("AccentTextBrush", light ? color : accent == "Azul" ? "#9AC6FF" : accent == "Verde" ? "#8BDCC5" : "#C5B6FF");
         Set("SelectedBrush", light ? accent == "Azul" ? "#D5E6FF" : accent == "Verde" ? "#CDEDE3" : "#E2DAFA" : accent == "Azul" ? "#304662" : accent == "Verde" ? "#294A43" : "#4A405E");
         window.SetResourceReference(Window.ForegroundProperty, "TextBrush");
+        WindowBranding.Apply(window);
     }
 }

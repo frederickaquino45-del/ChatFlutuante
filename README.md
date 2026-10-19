@@ -1,4 +1,4 @@
-# WindowFloatIA
+﻿# WindowFloatIA
 
 Base de aplicativo Windows em C# / .NET 10 / WPF, sem pacotes NuGet externos e sem navegador embutido.
 
@@ -125,3 +125,16 @@ Formulas LaTeX comuns entre `\( ... \)`, `\[ ... \]` ou `$$ ... $$` recebem form
 ## Multiplos provedores
 
 Consulte [Conexoes de IA](CONEXOES.md) para configurar Claude, Ollama/Qwen, OpenCode e servidores compativeis, incluindo autenticacao, historico por conexao e limites de validacao. O ChatGPT existente permanece disponivel por OAuth.
+
+
+## Identidade visual e integração com Windows
+
+As imagens Wfloat.IA estão incorporadas em `Assets`: ícone multirresolução no executável, bandeja e janelas, além das marcas nas configurações. As janelas nativas de configurações, contas e conexões usam a cor do tema na barra de título e na borda (DWM; cores personalizadas disponíveis no Windows 11, título escuro no Windows 10 compatível). A janela flutuante conserva sua moldura própria.
+
+Em **Configurações → Preferências → Inicialização e atalho**:
+
+- **Iniciar junto com o Windows** registra somente o usuário atual e abre na bandeja, com `--background`. Desmarcar remove o registro. Não exige administrador. Ative a opção com o executável em sua pasta definitiva; após movê-lo, desative e ative novamente.
+- Clique no campo de atalho, pressione a combinação e use **Aplicar atalho**. A alteração é imediata e persistente. Combinações indisponíveis preservam o atalho anterior. O padrão continua Ctrl + Alt + Espaço.
+- As preferências do atalho são independentes do histórico e das dimensões da janela. A bandeja informa o atalho atual.
+
+A inicialização automática não é ativada pela instalação ou pelos testes. Reinicie o aplicativo para carregar uma versão compilada nova.

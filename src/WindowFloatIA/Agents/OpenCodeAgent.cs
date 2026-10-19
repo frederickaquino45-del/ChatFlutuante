@@ -67,7 +67,7 @@ public sealed class OpenCodeAgent(HttpClient http, AgentConnection connection, C
             }
             using var result = await responseTask;
             if (result.RootElement.GetProperty("info").TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null)
-                throw new AgentException("O OpenCode não concluiu a resposta. Confira o provedor configurado no servidor.");
+                throw new AgentException(DescribeError(error));
             if (result.RootElement.GetProperty("info").TryGetProperty("finish", out var finish) && finish.GetString() is "length" or "content-filter")
                 throw new AgentException("O OpenCode interrompeu a resposta por limite de saída ou filtro do provedor.");
             var final = string.Concat(result.RootElement.GetProperty("parts").EnumerateArray()
@@ -89,6 +89,22 @@ public sealed class OpenCodeAgent(HttpClient http, AgentConnection connection, C
             }
             try { using var ignored = await responseTask; } catch { }
         }
+    }
+
+    internal static string DescribeError(JsonElement error)
+    {
+        // Classify provider errors without exposing raw bodies, headers or credentials.
+        if (error.ValueKind == JsonValueKind.Object && error.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+        {
+            var message = data.TryGetProperty("message", out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : "";
+            var status = data.TryGetProperty("statusCode", out var code) && code.TryGetInt32(out var number) ? number : 0;
+            if (status == 403 && message.Contains("free tier can only be used from within OpenCode", StringComparison.OrdinalIgnoreCase))
+                return "Este modelo gratuito é restrito ao uso dentro do OpenCode (HTTP 403). A conexão está funcionando, mas o provedor recusou esta integração. Selecione outro modelo/provedor autorizado ou use um modelo local pelo Ollama.";
+            if (status is 401 or 403) return "O provedor do modelo recusou o acesso (HTTP " + status + "). Confira a conta e as permissões do modelo no OpenCode; a conexão com o servidor foi estabelecida.";
+            if (status == 429) return "O provedor do modelo atingiu o limite de uso (HTTP 429). Aguarde ou confira a cota no provedor.";
+            if (status >= 500) return "O provedor do modelo está indisponível (HTTP " + status + "). Tente novamente mais tarde.";
+        }
+        return "O OpenCode não concluiu a resposta. Confira o provedor configurado no servidor.";
     }
 
     private static async Task PumpAsync(System.IO.Stream stream, ChannelWriter<string> writer, string session, string userMessage, CancellationToken token)
@@ -114,7 +130,7 @@ public sealed class OpenCodeAgent(HttpClient http, AgentConnection connection, C
                     continue;
                 }
                 if (type.GetString() == "session.error" && properties.TryGetProperty("sessionID", out var errorSession) && errorSession.GetString() == session)
-                    throw new AgentException("O OpenCode interrompeu a sessão. Confira o provedor e tente novamente.");
+                    throw new AgentException(properties.TryGetProperty("error", out var sessionError) ? DescribeError(sessionError) : "O OpenCode interrompeu a sessão. Confira o provedor e tente novamente.");
                 if (type.GetString() != "message.part.updated") continue;
                 if (!properties.TryGetProperty("part", out var part) || part.GetProperty("sessionID").GetString() != session ||
                     part.GetProperty("messageID").GetString() == userMessage || part.GetProperty("type").GetString() != "text") continue;

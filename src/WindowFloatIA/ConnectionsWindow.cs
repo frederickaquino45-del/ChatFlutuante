@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -15,7 +15,9 @@ internal sealed class ConnectionsWindow : Window
     private readonly List<AgentConnection> _connections;
     private readonly ConnectionStore _store;
     private readonly HttpClient _http;
-    private readonly ComboBox _saved = new() { MinWidth = 240 };
+    private readonly ListBox _saved = new() { MinHeight = 120 };
+    private readonly TextBlock _empty = new() { Text = "Selecione uma conexão à esquerda para editar ou clique em Nova conexão.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12) };
+    private readonly Dictionary<Control, TextBlock> _labels = new();
     private readonly ComboBox _kind = new() { ItemsSource = Enum.GetValues<ProviderKind>() };
     private readonly TextBox _name = new(), _url = new(), _username = new(), _limit = new();
     private readonly PasswordBox _secret = new();
@@ -27,16 +29,39 @@ internal sealed class ConnectionsWindow : Window
     public ConnectionsWindow(ConnectionStore store, HttpClient http, string theme, string accent)
     {
         _store = store; _http = http; _connections = store.Load();
-        Title = "Conexões de agentes"; Width = 540; Height = 700; MinWidth = 460; MinHeight = 500;
+        Title = "Conexões de agentes"; Width = 840; Height = 700; MinWidth = 720; MinHeight = 500;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/WindowFloatIA;component/Controls.xaml", UriKind.Relative) });
         Appearance.Apply(this, theme, accent); SetResourceReference(BackgroundProperty, "ShellBrush");
-        var panel = new StackPanel { Margin = new Thickness(24) };
-        panel.SetResourceReference(Panel.BackgroundProperty, "ShellBrush");
-        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        panel.Children.Add(new TextBlock { Text = "Claude, Ollama, OpenCode e compatíveis", FontSize = 18, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
-        _saved.ItemsSource = _connections; panel.Children.Add(_saved);
-        var create = Button("Nova conexão", () => { Load(null); return Task.CompletedTask; }); panel.Children.Add(create);
+        var layout = new Grid { Margin = new Thickness(20) };
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Content = layout;
+        var sidebar = new DockPanel { Margin = new Thickness(0, 0, 18, 0) };
+        layout.Children.Add(sidebar);
+        var heading = new TextBlock { Text = "Conexões salvas", FontSize = 18, Margin = new Thickness(0, 0, 0, 12) };
+        DockPanel.SetDock(heading, Dock.Top); sidebar.Children.Add(heading);
+        var create = Button("+ Nova conexão", () => { Load(null); return Task.CompletedTask; });
+        DockPanel.SetDock(create, Dock.Bottom); sidebar.Children.Add(create);
+        _saved.ItemsSource = _connections;
+        _saved.SetResourceReference(Control.BackgroundProperty, "SurfaceBrush");
+        _saved.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+        _saved.SetResourceReference(Control.BorderBrushProperty, "BorderBrush");
+        var template = new DataTemplate(typeof(AgentConnection));
+        var row = new FrameworkElementFactory(typeof(StackPanel));
+        row.SetValue(FrameworkElement.MarginProperty, new Thickness(6));
+        var title = new FrameworkElementFactory(typeof(TextBlock));
+        title.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Name"));
+        row.AppendChild(title);
+        var provider = new FrameworkElementFactory(typeof(TextBlock));
+        provider.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Kind"));
+        provider.SetValue(UIElement.OpacityProperty, 0.65);
+        row.AppendChild(provider); template.VisualTree = row; _saved.ItemTemplate = template;
+        sidebar.Children.Add(_saved);
+        var panel = new StackPanel();
+        var scroll = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        Grid.SetColumn(scroll, 1); layout.Children.Add(scroll);
+        panel.Children.Add(_empty);
         panel.Children.Add(_form);
         Field("Provedor", _kind); Field("Nome da conexão", _name); Field("URL base", _url);
         Field("Chave de API / senha do servidor (opcional para Ollama local)", _secret);
@@ -77,13 +102,15 @@ internal sealed class ConnectionsWindow : Window
             if (_loading || _kind.SelectedItem is not ProviderKind kind) return;
             _url.Text = kind switch { ProviderKind.Claude => "https://api.anthropic.com", ProviderKind.Ollama => "http://127.0.0.1:11434", ProviderKind.OpenCode => "http://127.0.0.1:4096", _ => "http://127.0.0.1:1234/v1" };
             _name.Text = kind == ProviderKind.Compatible ? "Servidor compatível" : kind.ToString();
+            UpdateFields();
         };
         Closed += (_, _) => _lifetime.Cancel();
-        Load(null);
+        _form.Visibility = Visibility.Collapsed;
     }
     private void Field(string label, Control control)
     {
-        _form.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 5) });
+        var caption = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 5) };
+        _labels[control] = caption; _form.Children.Add(caption);
         control.MinHeight = 30;
         control.SetResourceReference(Control.BackgroundProperty, "SurfaceBrush");
         control.SetResourceReference(Control.ForegroundProperty, "TextBrush");
@@ -113,11 +140,22 @@ internal sealed class ConnectionsWindow : Window
     private void Load(AgentConnection? connection)
     {
         _editing = connection; _loading = true;
+        _empty.Visibility = Visibility.Collapsed; _form.Visibility = Visibility.Visible; _status.Text = "";
         if (connection is null) _saved.SelectedIndex = -1;
         _kind.SelectedItem = connection?.Kind ?? ProviderKind.Ollama;
         _name.Text = connection?.Name ?? "Ollama local"; _url.Text = connection?.BaseUrl ?? "http://127.0.0.1:11434";
         _secret.Password = connection?.Secret ?? ""; _username.Text = connection?.Username ?? "opencode"; _limit.Text = (connection?.MaxTokens ?? 4096).ToString();
         _loading = false;
+        UpdateFields();
+    }
+    private void UpdateFields()
+    {
+        var kind = (ProviderKind)_kind.SelectedItem;
+        _username.Visibility = _labels[_username].Visibility = kind == ProviderKind.OpenCode ? Visibility.Visible : Visibility.Collapsed;
+        _limit.Visibility = _labels[_limit].Visibility = kind == ProviderKind.Claude ? Visibility.Visible : Visibility.Collapsed;
+        _labels[_secret].Text = kind == ProviderKind.OpenCode ? "Senha do servidor OpenCode (se exigida pelo servidor)" : "Chave de API (opcional para Ollama local)";
+        if (kind == ProviderKind.OpenCode)
+            _status.Text = "A porta 4096 é apenas o padrão de opencode serve. No desktop, use a porta real e o caminho da API (ex.: /api), com as credenciais do servidor.";
     }
     private AgentConnection Read()
     {

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 
@@ -15,7 +15,7 @@ internal sealed class GlobalHotKey : IDisposable
 
     public bool IsRegistered { get; }
 
-    public GlobalHotKey(Action onPressed)
+    public GlobalHotKey(Action onPressed, uint modifiers = 3, uint key = 32)
     {
         _onPressed = onPressed;
         // Janela de mensagens independente da visibilidade da interface.
@@ -25,8 +25,7 @@ internal sealed class GlobalHotKey : IDisposable
             WindowStyle = 0
         });
         _source.AddHook(WndProc);
-        const uint modifiers = 0x0001 | 0x0002 | 0x4000; // Alt + Ctrl + NoRepeat
-        IsRegistered = RegisterHotKey(_source.Handle, HotKeyId, modifiers, 0x20);
+        IsRegistered = RegisterHotKey(_source.Handle, HotKeyId, modifiers | 0x4000, key);
     }
 
     private IntPtr WndProc(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -131,6 +131,20 @@ internal static class Program
         Render(preferences, "preferences");
         ((Button)preferences.FindName("WindowNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Render(preferences, "preferences-window");
+        ((Button)preferences.FindName("SystemNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Render(preferences, "preferences-system");
+        Assert(window.Icon is not null && preferences.Icon is not null, "Brand icon applied to main and settings windows");
+        Assert(DesktopPreferences.Valid(3, 32) && DesktopPreferences.Valid(6, 65) && !DesktopPreferences.Valid(0, 65) && !DesktopPreferences.Valid(3, 16), "Shortcut validation requires supported key and modifiers");
+        Assert(new DesktopPreferences().Label == "Ctrl + Alt + Espaço", "Default shortcut remains compatible");
+        Assert(WindowsStartup.Command(@"C:\Program Files\Wfloat\WindowFloatIA.exe") == "\"C:\\Program Files\\Wfloat\\WindowFloatIA.exe\" --background", "Startup quotes executable path and starts in tray");
+        using (var registered = new GlobalHotKey(() => { }, 7, 121))
+        {
+            Assert(registered.IsRegistered, "Custom global shortcut registers");
+            using var conflict = new GlobalHotKey(() => { }, 7, 121);
+            Assert(!conflict.IsRegistered && registered.IsRegistered, "Conflicting shortcut does not remove current registration");
+        }
+        using (var released = new GlobalHotKey(() => { }, 7, 121))
+            Assert(released.IsRegistered, "Disposed shortcut releases native registration");
         ((CheckBox)preferences.FindName("PinPreference")).IsChecked = false;
         ((Button)preferences.FindName("AppearanceNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         ((ComboBox)preferences.FindName("ThemePreference")).SelectedIndex = 1;

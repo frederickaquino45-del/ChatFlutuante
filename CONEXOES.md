@@ -1,6 +1,6 @@
 # Conexões de IA
 
-Abra a engrenagem → Conta → **Claude, Ollama, OpenCode e outros**. Escolha **Nova conexão**, preencha os campos e use **Testar conexão / atualizar modelos**. O teste consulta apenas o catálogo; não envia perguntas. **Salvar e carregar modelos** persiste a configuração e disponibiliza a conexão no rodapé do chat.
+Abra a engrenagem → Conta → **Claude, Ollama, OpenCode e outros**. As conexões salvas aparecem na lista lateral; clique em uma para editar. Para cadastrar outra, escolha **Nova conexão**, preencha os campos e use **Testar conexão / atualizar modelos**. O teste consulta apenas o catálogo; não envia perguntas. **Salvar e carregar modelos** persiste a configuração e disponibiliza a conexão no rodapé do chat.
 
 | Provedor | URL base | Credencial |
 | --- | --- | --- |
@@ -18,6 +18,8 @@ O catálogo lista modelos instalados no servidor Ollama; Qwen aparece quando uma
 ## OpenCode
 
 Configure os provedores no próprio OpenCode e inicie `opencode serve --hostname 127.0.0.1 --port 4096` em uma pasta adequada. A senha é configurada no servidor com `OPENCODE_SERVER_PASSWORD`; o usuário padrão é `opencode`. Não é necessário informar as chaves dos provedores no WindowFloatIA. [Servidor OpenCode](https://opencode.ai/docs/server/).
+
+O desktop pode usar uma porta dinâmica diferente de 4096 e exigir `/api` na URL base. Uma página HTML indica que a URL aponta para a interface; HTTP 401 indica que faltam credenciais válidas do servidor. Abrir o desktop não garante um servidor na porta 4096.
 
 Cada conversa usa uma sessão remota própria. A integração consulta as ferramentas disponíveis, desabilita todas no envio e cria a sessão com permissão global `deny`. Se não conseguir enumerar as ferramentas, não envia a pergunta. Respostas usam eventos SSE e o resultado final HTTP. O cancelamento solicita `/abort`; em falhas, a sessão incompleta deixa de ser reutilizada. Se for necessário criar outra sessão, somente o contexto local concluído é reintroduzido, como texto.
 

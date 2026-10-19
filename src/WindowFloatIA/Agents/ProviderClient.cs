@@ -35,12 +35,15 @@ public sealed class ProviderClient(HttpClient http, AgentConnection connection)
     {
         HttpResponseMessage response;
         try { response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token); }
-        catch (HttpRequestException) { throw new AgentException("Não foi possível conectar. Confira o endereço e se o servidor está disponível."); }
+        catch (HttpRequestException) { throw new AgentException(connection.Kind == ProviderKind.OpenCode
+            ? "Não foi possível alcançar o OpenCode neste endereço. A porta 4096 só funciona se houver um servidor nela; o aplicativo desktop pode usar outra porta. Confira a porta atual e a URL da API nas configurações do servidor."
+            : "Não foi possível conectar. Confira o endereço e se o servidor está disponível."); }
         if (response.IsSuccessStatusCode) return response;
         var status = (int)response.StatusCode;
         response.Dispose();
         throw new AgentException(status switch
         {
+            401 when connection.Kind == ProviderKind.OpenCode => "O servidor OpenCode exige autenticação. Informe o usuário e a senha do servidor (não a chave do modelo).",
             401 or 403 => "Acesso recusado. Confira as credenciais e permissões desta conexão.",
             404 => "Modelo, sessão ou endpoint indisponível. Atualize os modelos ou abra uma nova conversa.",
             429 => "Limite de uso atingido. Aguarde antes de tentar novamente.",
@@ -52,7 +55,12 @@ public sealed class ProviderClient(HttpClient http, AgentConnection connection)
     {
         using var request = Request(method, path, body);
         using var response = await SendAsync(request, token);
-        return await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
+        if (response.Content.Headers.ContentType?.MediaType is "text/html" or "application/xhtml+xml")
+            throw new AgentException(connection.Kind == ProviderKind.OpenCode
+                ? "Este endereço retornou a interface HTML do OpenCode, não a API. Confira a URL base: no desktop ela pode exigir /api ao final, além do usuário e senha do servidor."
+                : "Este endereço retornou uma página HTML, não a API. Confira a URL base do servidor.");
+        try { return await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token); }
+        catch (JsonException) { throw new AgentException("O servidor não retornou JSON válido. Confira a URL base e a compatibilidade da API."); }
     }
     public async Task<IReadOnlyList<ModelChoice>> ListModelsAsync(CancellationToken token)
     {

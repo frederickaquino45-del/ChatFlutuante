@@ -21,6 +21,26 @@ internal static class ProviderChecks
     { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) => handler(request, token); }
     public static async Task RunAsync()
     {
+        using (var error = JsonDocument.Parse("{\"name\":\"APIError\",\"data\":{\"statusCode\":403,\"message\":\"OpenCode's free tier can only be used from within OpenCode. secret-value\"}}"))
+        {
+            var description = OpenCodeAgent.DescribeError(error.RootElement);
+            Check(description.Contains("modelo gratuito") && description.Contains("403") && !description.Contains("secret-value"), "OpenCode free tier restriction explained without raw provider data");
+        }
+        foreach (var html in new[] { true, false })
+        {
+            using var http = new HttpClient(new Handler((_, _) => Task.FromResult(Reply(html ? "<!doctype html><title>OpenCode</title>" : "invalid-json", html ? "text/html" : "application/json"))));
+            try { await new ProviderClient(http, new AgentConnection { Name = "Desktop", Kind = ProviderKind.OpenCode, BaseUrl = "http://localhost:45278" }).ListModelsAsync(default); throw new Exception("Invalid API response accepted"); }
+            catch (AgentException ex) { Check(ex.Message.Contains(html ? "HTML" : "JSON"), "Actionable diagnostic for " + (html ? "desktop HTML" : "invalid JSON")); }
+        }
+        using (var http = new HttpClient(new Handler((request, _) =>
+        {
+            Check(request.RequestUri!.AbsolutePath == "/api/provider", "OpenCode preserves API base path");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        })))
+        {
+            try { await new ProviderClient(http, new AgentConnection { Name = "Desktop", Kind = ProviderKind.OpenCode, BaseUrl = "http://localhost:45278/api" }).ListModelsAsync(default); throw new Exception("Missing authentication accepted"); }
+            catch (AgentException ex) { Check(ex.Message.Contains("senha do servidor"), "OpenCode explains server authentication"); }
+        }
         foreach (var kind in new[] { ProviderKind.Claude, ProviderKind.Ollama, ProviderKind.Compatible })
         {
             var connection = new AgentConnection { Name = kind.ToString(), Kind = kind, Secret = kind == ProviderKind.Ollama ? "" : "fake-secret", BaseUrl = kind == ProviderKind.Claude ? "https://api.anthropic.com" : "http://127.0.0.1:1234/v1" };
