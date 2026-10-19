@@ -14,7 +14,7 @@ public sealed class MarkdownTextBlock : TextBlock
     public static readonly DependencyProperty RenderMarkdownProperty = DependencyProperty.Register(nameof(RenderMarkdown), typeof(bool), typeof(MarkdownTextBlock), new PropertyMetadata(true, RenderChanged));
     public string SourceText { get => (string)GetValue(SourceTextProperty); set => SetValue(SourceTextProperty, value); }
     public bool RenderMarkdown { get => (bool)GetValue(RenderMarkdownProperty); set => SetValue(RenderMarkdownProperty, value); }
-    private static readonly Regex InlinePattern = new(@"(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|\[[^\]\n]+\]\(https?://[^\s)]+\))", RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
+    private static readonly Regex InlinePattern = new(@"(`[^`\n]+`|\\\([^\n]*?\\\)|\\\[[^\n]*?\\\]|\$\$[^\n]*?\$\$|\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|\[[^\]\n]+\]\(https?://[^\s)]+\))", RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
     private static readonly Regex Heading = new(@"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$", RegexOptions.Compiled);
     private static readonly Regex Bullet = new(@"^\s*[-+*]\s+", RegexOptions.Compiled);
     private static void RenderChanged(DependencyObject target, DependencyPropertyChangedEventArgs args) => ((MarkdownTextBlock)target).Render();
@@ -27,6 +27,8 @@ public sealed class MarkdownTextBlock : TextBlock
         var code = false;
         string? fence = null;
         var first = true;
+        System.Text.StringBuilder? formula = null;
+        string? mathEnd = null;
         foreach (var line in source.Replace("\r\n", "\n").Split('\n'))
         {
             var trimmed = line.TrimStart();
@@ -34,6 +36,21 @@ public sealed class MarkdownTextBlock : TextBlock
             {
                 if (!code) { fence = trimmed.StartsWith("```") ? "```" : "~~~"; code = true; }
                 else code = false;
+                continue;
+            }
+            if (!code && formula is not null)
+            {
+                if (trimmed == mathEnd)
+                {
+                    if (!first) Inlines.Add(new LineBreak());
+                    Inlines.Add(MathInline.Create(formula.ToString())); first = false; formula = null;
+                }
+                else formula.AppendLine(line);
+                continue;
+            }
+            if (!code && (trimmed == @"\[" || trimmed == "$$"))
+            {
+                formula = new System.Text.StringBuilder(); mathEnd = trimmed == "$$" ? "$$" : @"\]";
                 continue;
             }
             if (!first) Inlines.Add(new LineBreak());
@@ -69,6 +86,7 @@ public sealed class MarkdownTextBlock : TextBlock
                 else AddInline(Inlines, text);
             }
         }
+        if (formula is not null) { if (!first) Inlines.Add(new LineBreak()); Inlines.Add(MathInline.Create(formula.ToString())); }
     }
 
     private static void AddInline(InlineCollection target, string text)
@@ -86,6 +104,7 @@ public sealed class MarkdownTextBlock : TextBlock
                 var run = new Run(value[1..^1]) { FontFamily = new FontFamily("Consolas") };
                 run.SetResourceReference(TextElement.BackgroundProperty, "ShellBrush"); target.Add(run);
             }
+            else if (value.StartsWith(@"\(") || value.StartsWith(@"\[") || value.StartsWith("$$")) target.Add(MathInline.Create(value[2..^2]));
             else if (value.StartsWith("**") || value.StartsWith("__")) target.Add(new Bold(new Run(value[2..^2])));
             else if (value.StartsWith('*')) target.Add(new Italic(new Run(value[1..^1])));
             else

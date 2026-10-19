@@ -119,3 +119,5 @@ Os botoes do chat usam icones Fluent com descricoes ao passar o mouse e nomes ac
 As respostas usam renderizacao nativa de Markdown basico: titulos, negrito, italico, listas, citacoes, separadores e codigo em linha ou cercado por crases. Mensagens do usuario permanecem literais. Links exibem o rotulo e o endereco ao passar o mouse. HTML e imagens remotas nao sao executados/carregados; tabelas e extensoes avancadas permanecem como texto. O historico conserva o Markdown original.
 
 A rolagem usa um indicador fino, sem setas, com contraste no hover e cores acompanhando o tema.
+
+Formulas LaTeX comuns entre `\( ... \)`, `\[ ... \]` ou `$$ ... $$` recebem formatacao nativa: fracoes, raizes, expoentes, indices e simbolos matematicos. Expressoes incompletas ou comandos nao suportados preservam o texto original; nao e um motor LaTeX completo. Blocos de codigo permanecem literais.
