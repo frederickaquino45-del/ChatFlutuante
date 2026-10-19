@@ -33,6 +33,14 @@ public partial class MainWindow : Window
     private double _compactWidth, _compactHeight, _expandedWidth, _expandedHeight;
     private string _lastModel;
     private string _theme, _accent;
+    private readonly ConnectionStore _connectionStore = new();
+    private List<AgentConnection> _connections = new();
+    private readonly Dictionary<string, IReadOnlyList<ModelChoice>> _catalogues = new();
+    private readonly System.Collections.Generic.HashSet<string> _loadedHistories = new();
+    private string CurrentConnectionId => Workspace.Selected.ConnectionId;
+    private AgentConnection? SelectedConnection => _connections.Find(c => c.Id == CurrentConnectionId);
+    private sealed record ConnectionOption(string Id, string Name)
+    { public override string ToString() => Name; }
     private readonly ChatHistoryStore _history = new();
     private string? _historyAccount;
     private readonly DispatcherTimer _historyTimer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -50,6 +58,14 @@ public partial class MainWindow : Window
         _expandedHeight = settings.ExpandedHeight;
         InitializeComponent();
         Appearance.Apply(this, _theme, _accent);
+        if (agent is null)
+        {
+            try { _connections = _connectionStore.Load(); }
+            catch { Workspace.Selected.Status = "Não foi possível ler as conexões protegidas."; }
+        }
+        foreach (var c in _connections) _catalogues[c.Id] = c.Models;
+        Workspace.Selected.ConnectionId = _connections.Any(c => c.Id == settings.ConnectionId) ? settings.ConnectionId : "chatgpt";
+        RefreshConnectionPicker();
         DataContext = Workspace;
         Width = _compactWidth;
         Height = _compactHeight;
@@ -71,8 +87,14 @@ public partial class MainWindow : Window
         if (agent is null && _auth?.IsSignedIn == true)
         {
             _historyAccount = _auth.Selected!.ClientId;
-            RestoreHistory();
+            if (CurrentConnectionId == "chatgpt") RestoreHistory();
         }
+        if (agent is null && CurrentConnectionId != "chatgpt")
+        {
+            try { _history.Restore("connection:" + CurrentConnectionId, Workspace, connectionId: CurrentConnectionId); }
+            catch { Workspace.Selected.Status = "Não foi possível restaurar esta conexão."; }
+        }
+        _loadedHistories.Add(CurrentConnectionId);
         Workspace.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ChatWorkspace.Selected)) DisplaySelected(); };
         Workspace.ContentChanged += tab =>
         {
@@ -81,7 +103,7 @@ public partial class MainWindow : Window
             ApplyExpanded(tab.Expanded);
             QueueScroll();
         };
-        Workspace.BusyChanged += UpdateControls;
+        Workspace.BusyChanged += () => { UpdateControls(); SaveHistory(); };
         DisplaySelected();
         Loaded += async (_, _) =>
         {
@@ -103,6 +125,63 @@ public partial class MainWindow : Window
         };
     }
 
+    internal void ConfigureConnections(IEnumerable<AgentConnection> connections)
+    {
+        _connections = connections.ToList();
+        foreach (var c in _connections) _catalogues[c.Id] = c.Models;
+        RefreshConnectionPicker();
+    }
+    private void RefreshConnectionPicker()
+    {
+        _syncing = true;
+        ConnectionPicker.ItemsSource = new[] { new ConnectionOption("chatgpt", "ChatGPT") }
+            .Concat(_connections.Select(c => new ConnectionOption(c.Id, c.Name + (c.Enabled ? "" : " (offline)")))).ToList();
+        ConnectionPicker.SelectedValue = CurrentConnectionId;
+        _syncing = false;
+    }
+    private async void OnConnectionSelection(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncing || _restoringConnection || Workspace.Selected.IsBusy || ConnectionPicker.SelectedValue is not string id || id == CurrentConnectionId) return;
+        SaveHistory();
+        var previous = Workspace.Selected;
+        if (_testAgent is null && !_loadedHistories.Contains(id))
+        {
+            var key = id == "chatgpt" ? _historyAccount : "connection:" + id;
+            if (key is not null)
+            {
+                try { _history.Restore(key, Workspace, append: true, connectionId: id); }
+                catch { previous.Status = "Não foi possível restaurar o histórico desta conexão."; }
+            }
+            _loadedHistories.Add(id);
+        }
+        if (Workspace.Selected == previous || CurrentConnectionId != id) Workspace.Add("", id);
+        // Switching providers never sends the previous provider's context.
+        if (_testAgent is not null) { SetModels(_catalogues.GetValueOrDefault(id) ?? Array.Empty<ModelChoice>()); return; }
+        if (id == "chatgpt") await RestoreConnectionAsync();
+        else await RefreshExternalModelsAsync();
+        SavePreferences();
+    }
+    private async Task RefreshExternalModelsAsync()
+    {
+        var connection = SelectedConnection;
+        var tab = Workspace.Selected;
+        if (connection is null || !connection.Enabled) { tab.Status = "Conexão desconectada. Histórico disponível para leitura."; return; }
+        _restoringConnection = true; UpdateControls();
+        tab.Status = "Carregando modelos de " + connection.Name + "...";
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
+        {
+            var models = await new ProviderClient(Http, connection).ListModelsAsync(timeout.Token);
+            _catalogues[connection.Id] = models;
+            if (CurrentConnectionId == connection.Id) SetModels(models);
+            _connections[_connections.IndexOf(connection)] = connection with { Models = models.ToList() };
+            _connectionStore.Save(_connections);
+            tab.Status = models.Count == 0 ? "Nenhum modelo disponível. Instale ou configure um modelo no servidor." : "Conectado: " + connection.Name;
+        }
+        catch (Exception ex) { tab.Status = ex is AgentException ? ex.Message : "Não foi possível atualizar os modelos. Confira a conexão nas Configurações."; }
+        finally { _restoringConnection = false; UpdateControls(); }
+    }
+
     private void DisplaySelected()
     {
         if (_displayed is not null)
@@ -114,6 +193,11 @@ public partial class MainWindow : Window
         _displayed = Workspace.Selected;
         _displayed.PropertyChanged += OnTabPropertyChanged;
         _syncing = true;
+        ConnectionPicker.SelectedValue = _displayed.ConnectionId;
+        _displayed.ProviderName = _displayed.ConnectionId == "chatgpt" ? "GPT" : SelectedConnection?.Name ?? "IA";
+        _models = _catalogues.GetValueOrDefault(_displayed.ConnectionId) ?? Array.Empty<ModelChoice>();
+        ModelPicker.ItemsSource = _models;
+        if (_displayed.Model.Length == 0 && !_displayed.RequiresModelSelection) _displayed.Model = _models.FirstOrDefault()?.Slug ?? "";
         Composer.Text = _displayed.Draft;
         TabList.SelectedItem = _displayed;
         ModelPicker.SelectedValue = _displayed.Model;
@@ -168,10 +252,11 @@ public partial class MainWindow : Window
         if (SendButton is null) return;
         var tab = Workspace.Selected;
         Placeholder.Visibility = Composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        SendButton.IsEnabled = !_restoringConnection && (tab.IsBusy || !string.IsNullOrWhiteSpace(tab.Draft));
+        SendButton.IsEnabled = tab.IsBusy || (!_restoringConnection && !string.IsNullOrWhiteSpace(tab.Draft));
         SendButton.Content = tab.IsBusy ? "\uE71A" : "\uE724";
         SendButton.ToolTip = tab.IsBusy ? "Parar resposta desta aba" : "Enviar (Enter)";
         System.Windows.Automation.AutomationProperties.SetName(SendButton, tab.IsBusy ? "Parar resposta" : "Enviar mensagem");
+        ConnectionPicker.IsEnabled = !tab.IsBusy && !_restoringConnection;
         SettingsButton.IsEnabled = !Workspace.AnyBusy && !_restoringConnection;
         ModelPicker.IsEnabled = !tab.IsBusy && !_restoringConnection && _models.Count > 0;
         UpdateJumpButton();
@@ -186,7 +271,7 @@ public partial class MainWindow : Window
         if (_restoringConnection) return;
         var tab = Workspace.Selected;
         if (tab.IsBusy || string.IsNullOrWhiteSpace(tab.Draft)) return;
-        if (_testAgent is null && _auth?.IsSignedIn != true)
+        if (_testAgent is null && CurrentConnectionId == "chatgpt" && _auth?.IsSignedIn != true)
         {
             OnAccountSettings();
             if (_auth?.IsSignedIn != true) return;
@@ -198,7 +283,16 @@ public partial class MainWindow : Window
             ModelPicker.Focus(); ModelPicker.IsDropDownOpen = true;
             return;
         }
-        _ = Workspace.SendAsync(tab, _testAgent ?? new OpenAiAgent(Http, _auth!.GetAccessTokenAsync, tab.Model));
+        IChatAgent agent;
+        if (_testAgent is not null) agent = _testAgent;
+        else if (CurrentConnectionId == "chatgpt") agent = new OpenAiAgent(Http, _auth!.GetAccessTokenAsync, tab.Model);
+        else
+        {
+            var connection = SelectedConnection;
+            if (connection is null || !connection.Enabled) { tab.Status = "Conexão desconectada. Abra Configurações para reconectar."; return; }
+            agent = connection.Kind == ProviderKind.OpenCode ? new OpenCodeAgent(Http, connection, tab) : new ProviderAgent(Http, connection, tab.Model);
+        }
+        _ = Workspace.SendAsync(tab, agent);
     }
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -210,9 +304,10 @@ public partial class MainWindow : Window
     internal void SetModels(IReadOnlyList<ModelChoice> models)
     {
         _models = models;
+        _catalogues[CurrentConnectionId] = models;
         _syncing = true;
         ModelPicker.ItemsSource = models;
-        foreach (var tab in Workspace.Tabs)
+        foreach (var tab in Workspace.Tabs.Where(t => t.ConnectionId == CurrentConnectionId))
         {
             if (tab.Model.Length == 0 && !tab.RequiresModelSelection) tab.Model = models.FirstOrDefault(m => m.Slug == _lastModel)?.Slug ?? models.FirstOrDefault()?.Slug ?? "";
             else if (!models.Any(m => m.Slug == tab.Model)) { tab.RequiresModelSelection = true; tab.Model = ""; tab.Status = "Modelo indisponível. Escolha outro modelo."; }
@@ -232,17 +327,22 @@ public partial class MainWindow : Window
     }
     private async Task RestoreConnectionAsync()
     {
-        if (_testAgent is not null || _auth?.IsSignedIn != true) return;
+        if (_testAgent is not null) return;
+        if (CurrentConnectionId != "chatgpt") { await RefreshExternalModelsAsync(); return; }
+        if (_auth?.IsSignedIn != true) return;
+        var restoringTab = Workspace.Selected;
         _restoringConnection = true; UpdateControls();
-        Workspace.Selected.Status = "Restaurando sessão ChatGPT…";
+        restoringTab.Status = "Restaurando sessão ChatGPT…";
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         try
         {
-            SetModels(await _auth.ListModelsAsync(timeout.Token));
-            Workspace.Selected.Status = Workspace.Selected.Model.Length > 0 ? "ChatGPT conectado" : "Selecione um modelo disponível";
+            var models = await _auth.ListModelsAsync(timeout.Token);
+            _catalogues["chatgpt"] = models;
+            if (CurrentConnectionId == "chatgpt") SetModels(models);
+            restoringTab.Status = restoringTab.Model.Length > 0 ? "ChatGPT conectado" : "Selecione um modelo disponível";
         }
-        catch (Exception ex) { Workspace.Selected.Status = ex is AgentException ? ex.Message : "Não foi possível restaurar a conexão. Abra Conta para tentar novamente."; }
+        catch (Exception ex) { restoringTab.Status = ex is AgentException ? ex.Message : "Não foi possível restaurar a conexão. Abra Conta para tentar novamente."; }
         finally { _restoringConnection = false; UpdateControls(); }
     }
     private void OnSettings(object sender, RoutedEventArgs e)
@@ -255,12 +355,25 @@ public partial class MainWindow : Window
         {
             Topmost = pin; _theme = theme; _accent = accent;
             Appearance.Apply(this, theme, accent); SavePreferences();
+        }, () =>
+        {
+            try
+            {
+                var connections = new ConnectionsWindow(_connectionStore, Http, _theme, _accent) { Owner = settings };
+                connections.ShowDialog();
+                _connections = _connectionStore.Load();
+                foreach (var c in _connections) _catalogues[c.Id] = c.Models;
+                RefreshConnectionPicker();
+                if (CurrentConnectionId != "chatgpt") SetModels(SelectedConnection?.Models ?? new List<ModelChoice>());
+            }
+            catch { Workspace.Selected.Status = "Não foi possível abrir as conexões protegidas."; }
         }) { Owner = this };
         settings.ShowDialog();
     }
     private void OnAccountSettings(Window? owner = null)
     {
         if (Workspace.AnyBusy || _restoringConnection) return;
+        if (CurrentConnectionId != "chatgpt") Workspace.Add("", "chatgpt");
         try
         {
             _auth ??= new ChatGptAuth(Http, new AuthStore());
@@ -291,6 +404,7 @@ public partial class MainWindow : Window
         if (accountChanged || signedOut || (!wasSignedIn && signedIn))
         {
             Workspace.Reset();
+            Workspace.Selected.ConnectionId = "chatgpt";
             if (signedIn && _testAgent is null) RestoreHistory();
             if (!wasSignedIn && signedIn && draft.Length > 0) Workspace.Selected.Draft = draft;
         }
@@ -430,20 +544,27 @@ public partial class MainWindow : Window
     }
     private void QueueHistorySave()
     {
-        if (_testAgent is not null || _historyAccount is null) return;
+        if (_testAgent is not null) return;
         _historyTimer.Stop(); _historyTimer.Start();
     }
     private void SaveHistory()
     {
-        if (_testAgent is not null || _historyAccount is null) return;
-        try { _history.Save(_historyAccount, Workspace.Tabs); }
-        catch { Workspace.Selected.Status = "Nao foi possivel salvar o historico local."; }
+        if (_testAgent is not null) return;
+        try
+        {
+            foreach (var group in Workspace.Tabs.GroupBy(t => t.ConnectionId))
+            {
+                var key = group.Key == "chatgpt" ? _historyAccount : "connection:" + group.Key;
+                if (key is not null) _history.Save(key, group);
+            }
+        }
+        catch { Workspace.Selected.Status = "Não foi possível salvar o histórico local."; }
     }
     private void RestoreHistory()
     {
         if (_historyAccount is null) return;
         try { _history.Restore(_historyAccount, Workspace); }
-        catch { Workspace.Selected.Status = "Nao foi possivel restaurar o historico local."; }
+        catch { Workspace.Selected.Status = "Não foi possível restaurar o histórico local."; }
     }
     public void SavePreferences()
     {
@@ -451,6 +572,6 @@ public partial class MainWindow : Window
         SaveHistory();
         RememberSize();
         WindowPreferences.Save(new WindowPreferences(double.IsFinite(Left) ? Left : null, double.IsFinite(Top) ? Top : null,
-            _compactWidth, 300, Topmost, _compactHeight, _expandedWidth, _expandedHeight, _lastModel, _theme, _accent));
+            _compactWidth, 300, Topmost, _compactHeight, _expandedWidth, _expandedHeight, _lastModel, _theme, _accent, CurrentConnectionId));
     }
 }

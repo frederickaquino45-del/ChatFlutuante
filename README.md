@@ -104,13 +104,13 @@ A mesma suíte testa PKCE com vetor RFC, callback HTTP local, state incorreto, c
 - Durante uma resposta, apenas a troca de modelo dessa aba fica bloqueada. Outras abas podem enviar perguntas; a configuração de conta permanece bloqueada enquanto qualquer aba responde para evitar misturar contas.
 - A rolagem acompanha a resposta quando o leitor está próximo ao final. Rolar para cima suspende esse acompanhamento; **↓ Ir para o final** retoma. As atualizações de rolagem são agrupadas e executadas após o layout.
 - Até cinco conversas recentes por conta são restauradas ao reabrir, com mensagens, rascunho, modelo e contexto concluído. Fechar uma aba preserva seu histórico; conversas mais antigas saem do armazenamento quando excedem o limite de cinco. Os arquivos ficam em `%LOCALAPPDATA%/WindowFloatIA/history`, cifrados com DPAPI. Respostas interrompidas não entram no contexto enviado ao agente.
-- O primeiro agente somente responde por texto: não tem ferramentas, acesso ao computador, uploads, pesquisa na web ou ações externas.
+- As conexoes desta versao somente respondem por texto: não tem ferramentas, acesso ao computador, uploads, pesquisa na web ou ações externas.
 
 Anexos para IA, ferramentas, comando de voz e inicialização automática ficam para próximas etapas.
 
 ## Aparencia e configuracoes
 
-A engrenagem centraliza contas e o agente ChatGPT, a opcao de manter a janela acima dos outros aplicativos e a aparencia. Os temas Claro/Escuro e destaques Violeta/Azul/Verde sao aplicados imediatamente e persistidos nas preferencias. Outros provedores de agentes ainda nao foram implementados.
+A engrenagem centraliza contas e o agente ChatGPT, a opcao de manter a janela acima dos outros aplicativos e a aparencia. Os temas Claro/Escuro e destaques Violeta/Azul/Verde sao aplicados imediatamente e persistidos nas preferencias. Claude, Ollama, OpenCode e servidores compativeis podem ser configurados na mesma secao.
 
 Os botoes do chat usam icones Fluent com descricoes ao passar o mouse e nomes acessiveis. O seletor de modelos acompanha o tema escolhido.
 
@@ -121,3 +121,7 @@ As respostas usam renderizacao nativa de Markdown basico: titulos, negrito, ital
 A rolagem usa um indicador fino, sem setas, com contraste no hover e cores acompanhando o tema.
 
 Formulas LaTeX comuns entre `\( ... \)`, `\[ ... \]` ou `$$ ... $$` recebem formatacao nativa: fracoes, raizes, expoentes, indices e simbolos matematicos. Expressoes incompletas ou comandos nao suportados preservam o texto original; nao e um motor LaTeX completo. Blocos de codigo permanecem literais.
+
+## Multiplos provedores
+
+Consulte [Conexoes de IA](CONEXOES.md) para configurar Claude, Ollama/Qwen, OpenCode e servidores compativeis, incluindo autenticacao, historico por conexao e limites de validacao. O ChatGPT existente permanece disponivel por OAuth.

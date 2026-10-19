@@ -11,8 +11,8 @@ using WindowFloatIA.Auth;
 namespace WindowFloatIA;
 
 public sealed record SavedChat(Guid Id, DateTime Updated, string Title, string Draft, string Model,
-    bool Expanded, List<SavedMessage> Messages, List<AgentMessage> Context);
-public sealed record SavedMessage(string Author, string Text, string Background);
+    bool Expanded, List<SavedMessage> Messages, List<AgentMessage> Context, string ConnectionId = "chatgpt", string? RemoteSessionId = null);
+public sealed record SavedMessage(string Author, string Text, string Background, bool? Assistant = null);
 
 public sealed class ChatHistoryStore(string? directory = null)
 {
@@ -33,7 +33,7 @@ public sealed class ChatHistoryStore(string? directory = null)
         var saved = Load(account).ToDictionary(c => c.Id);
         foreach (var tab in tabs.Where(t => t.Messages.Count > 0 || !string.IsNullOrWhiteSpace(t.Draft)))
             saved[tab.Id] = new(tab.Id, tab.Updated, tab.Title, tab.Draft, tab.Model, tab.Expanded,
-                tab.Messages.TakeLast(100).Select(m => new SavedMessage(m.Author, m.Text + (tab.IsBusy && m == tab.Messages.Last() ? "\n[Resposta interrompida ao encerrar o aplicativo.]" : ""), m.Background)).ToList(), tab.Session.Export());
+                tab.Messages.TakeLast(100).Select(m => new SavedMessage(m.Author, m.Text + (tab.IsBusy && m == tab.Messages.Last() ? "\n[Resposta interrompida ao encerrar o aplicativo.]" : ""), m.Background, m.IsAssistant)).ToList(), tab.Session.Export(), tab.ConnectionId, tab.IsBusy ? null : tab.RemoteSessionId);
         var bytes = JsonSerializer.SerializeToUtf8Bytes(saved.Values.OrderByDescending(c => c.Updated).Take(5).ToList());
         try
         {
@@ -45,21 +45,23 @@ public sealed class ChatHistoryStore(string? directory = null)
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }
 
-    public void Restore(string account, ChatWorkspace workspace)
+    public void Restore(string account, ChatWorkspace workspace, bool append = false, string? connectionId = null)
     {
         var saved = Load(account);
         if (saved.Count == 0) return;
-        workspace.Reset();
-        var blank = workspace.Selected;
+        if (!append) workspace.Reset();
+        var blank = append ? null : workspace.Selected;
         foreach (var chat in saved.AsEnumerable().Reverse())
         {
-            var tab = workspace.Add(chat.Model);
+            if (workspace.Tabs.Any(t => t.Id == chat.Id)) continue;
+            var tab = workspace.Add(chat.Model, connectionId ?? chat.ConnectionId);
+            tab.RemoteSessionId = chat.RemoteSessionId;
             tab.Id = chat.Id; tab.Updated = chat.Updated;
             tab.Title = chat.Title; tab.Draft = chat.Draft; tab.Expanded = chat.Expanded;
-            foreach (var message in chat.Messages.TakeLast(100)) tab.Messages.Add(new(message.Author, message.Text, message.Background));
+            foreach (var message in chat.Messages.TakeLast(100)) tab.Messages.Add(new(message.Author, message.Text, message.Background, message.Assistant));
             tab.Session.Restore(chat.Context);
             tab.Status = "Conversa restaurada";
         }
-        workspace.Close(blank);
+        if (blank is not null) workspace.Close(blank);
     }
 }

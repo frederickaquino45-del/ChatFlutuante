@@ -6,7 +6,7 @@ namespace WindowFloatIA;
 
 internal sealed class PreferencesWindow : Window
 {
-    public PreferencesWindow(bool pinned, string theme, string accent, Action accounts, Action<bool, string, string> changed)
+    public PreferencesWindow(bool pinned, string theme, string accent, Action accounts, Action<bool, string, string> changed, Action? connections = null)
     {
         Title = "Configurações · WindowFloatIA";
         Width = 680; Height = 480; MinWidth = 600; MinHeight = 400;
@@ -68,11 +68,17 @@ internal sealed class PreferencesWindow : Window
         void Heading(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 17, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 16, 0, 10) });
         void Description(string text) { var block = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) }; block.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); panel.Children.Add(block); }
         Heading("Conta");
-        Description("ChatGPT · Agente ativo para suas conversas. Escolha o modelo no rodapé de cada chat.");
+        Description("Configure suas conexões. Escolha a conexão e o modelo no rodapé de cada chat.");
         var account = new Button { Content = "Gerenciar contas e modelos do ChatGPT", Padding = new Thickness(12), ToolTip = "Conectar, trocar ou desconectar uma conta e consultar seus modelos" };
         account.SetResourceReference(BackgroundProperty, "SurfaceBrush");
         account.Click += (_, _) => accounts();
         panel.Children.Add(account);
+        if (connections is not null)
+        {
+            var manage = new Button { Content = "Claude, Ollama, OpenCode e outros", Padding = new Thickness(12), Margin = new Thickness(0, 12, 0, 0), ToolTip = "Configurar conexoes e modelos" };
+            manage.SetResourceReference(BackgroundProperty, "SurfaceBrush");
+            manage.Click += (_, _) => connections(); panel.Children.Add(manage);
+        }
         panel = windowPage;
         Heading("Modo janela");
         Description("Escolha como o chat se comporta sobre os outros aplicativos.");

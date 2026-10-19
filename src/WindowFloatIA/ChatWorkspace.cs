@@ -14,10 +14,10 @@ public abstract class ObservableState : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     protected void Changed(string name) => PropertyChanged?.Invoke(this, new(name));
 }
-public sealed class ChatMessage(string author, string text, string background) : ObservableState
+public sealed class ChatMessage(string author, string text, string background, bool? assistant = null) : ObservableState
 {
     public string Author { get; } = author;
-    public bool IsAssistant => Author.StartsWith("GPT", StringComparison.Ordinal);
+    public bool IsAssistant => assistant ?? Author.StartsWith("GPT", StringComparison.Ordinal);
     public string Background { get; } = background;
     private string _text = text;
     public string Text { get => _text; set { _text = value; Changed(nameof(Text)); } }
@@ -25,6 +25,9 @@ public sealed class ChatMessage(string author, string text, string background) :
 public sealed class ChatTab : ObservableState
 {
     public ObservableCollection<ChatMessage> Messages { get; } = new();
+    public string ConnectionId { get; set; } = "chatgpt";
+    public string ProviderName { get; set; } = "GPT";
+    public string? RemoteSessionId { get; set; }
     public Guid Id { get; set; } = Guid.NewGuid();
     public DateTime Updated { get; set; } = DateTime.UtcNow;
     public ConversationSession Session { get; } = new();
@@ -55,9 +58,9 @@ public sealed class ChatWorkspace : ObservableState
     public event Action<ChatTab>? ContentChanged;
     public event Action? BusyChanged;
     public ChatWorkspace() => Add();
-    public ChatTab Add(string model = "")
+    public ChatTab Add(string model = "", string? connectionId = null)
     {
-        var tab = new ChatTab { Model = model };
+        var tab = new ChatTab { Model = model, ConnectionId = connectionId ?? _selected?.ConnectionId ?? "chatgpt" };
         Tabs.Add(tab);
         Selected = tab;
         return tab;
@@ -74,11 +77,11 @@ public sealed class ChatWorkspace : ObservableState
         else if (Selected == tab) Selected = Tabs[Math.Min(index, Tabs.Count - 1)];
         BusyChanged?.Invoke();
     }
-    public void Reset(string model = "")
+    public void Reset(string model = "", string connectionId = "chatgpt")
     {
         foreach (var tab in Tabs) { tab.Closed = true; tab.Request?.Cancel(); }
         Tabs.Clear();
-        Add(model);
+        Add(model, connectionId);
     }
     public void CancelAll() { foreach (var tab in Tabs) tab.Request?.Cancel(); }
 
@@ -99,7 +102,7 @@ public sealed class ChatWorkspace : ObservableState
             tab.Title = title.Length > 26 ? title[..26] + "…" : title;
         }
         tab.Messages.Add(new("Você", text, "#37333F"));
-        var answer = new ChatMessage(string.IsNullOrEmpty(tab.Model) ? "GPT" : "GPT · " + tab.Model, "Aguardando resposta…", "#303030");
+        var answer = new ChatMessage(string.IsNullOrEmpty(tab.Model) ? tab.ProviderName : tab.ProviderName + " · " + tab.Model, "Aguardando resposta…", "#303030", true);
         tab.Messages.Add(answer);
         while (tab.Messages.Count > 100) tab.Messages.RemoveAt(0);
         tab.Draft = "";
@@ -108,7 +111,7 @@ public sealed class ChatWorkspace : ObservableState
         using var request = new CancellationTokenSource(TimeSpan.FromMinutes(3));
         tab.Request = request;
         tab.IsBusy = true;
-        tab.Status = "Aguardando GPT…";
+        tab.Status = "Aguardando " + tab.ProviderName + "…";
         BusyChanged?.Invoke();
         ContentChanged?.Invoke(tab);
         var partial = "";
@@ -120,7 +123,7 @@ public sealed class ChatWorkspace : ObservableState
                 partial = value;
                 if (tab.Closed || paint.ElapsedMilliseconds < 50) return;
                 answer.Text = value;
-                tab.Status = "GPT respondendo…";
+                tab.Status = tab.ProviderName + " respondendo…";
                 if (tab != Selected) tab.Unread = true;
                 ContentChanged?.Invoke(tab);
                 paint.Restart();

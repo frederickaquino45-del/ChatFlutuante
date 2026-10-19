@@ -85,13 +85,13 @@
     <TextBox x:Name="Composer" Background="Transparent" Foreground="{DynamicResource TextBrush}" CaretBrush="{DynamicResource TextBrush}"
      BorderThickness="0" Padding="0" MinHeight="36" MaxHeight="120" AcceptsReturn="True"
      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="OnTextChanged" AutomationProperties.Name="Mensagem"/>
-    <TextBlock x:Name="Placeholder" Text="Pergunte ao GPT…" Foreground="{DynamicResource MutedBrush}" IsHitTestVisible="False" Margin="2,2,0,0"/>
+    <TextBlock x:Name="Placeholder" Text="Digite sua pergunta…" Foreground="{DynamicResource MutedBrush}" IsHitTestVisible="False" Margin="2,2,0,0"/>
    </Grid>
    <Grid Grid.Row="4">
     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <TextBlock Text="&#xE99A;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" ToolTip="Agente ChatGPT" Foreground="{DynamicResource AccentTextBrush}" FontSize="19" VerticalAlignment="Center" Margin="0,0,10,0"/>
-    <ComboBox x:Name="ModelPicker" Grid.Column="1" MaxWidth="260" MinWidth="100" HorizontalAlignment="Left" VerticalAlignment="Center"
-     DisplayMemberPath="DisplayName" SelectedValuePath="Slug" SelectionChanged="OnModelSelection" ToolTip="Modelo desta conversa" AutomationProperties.Name="Modelo GPT"/>
+    <ComboBox x:Name="ConnectionPicker" Grid.Column="0" Width="120" Margin="0,0,8,0" VerticalAlignment="Center" DisplayMemberPath="Name" SelectedValuePath="Id" SelectionChanged="OnConnectionSelection" ToolTip="Conexão desta conversa; trocar abre outro chat" AutomationProperties.Name="Conexão de IA"/>
+    <ComboBox x:Name="ModelPicker" Grid.Column="1" MaxWidth="260" MinWidth="80" HorizontalAlignment="Left" VerticalAlignment="Center"
+     DisplayMemberPath="DisplayName" SelectedValuePath="Slug" SelectionChanged="OnModelSelection" ToolTip="Modelo desta conversa" AutomationProperties.Name="Modelo de IA"/>
 
     <Button Grid.Column="3" x:Name="SendButton" Content="&#xE724;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Background="{DynamicResource AccentBrush}" Width="34" IsEnabled="False" ToolTip="Enviar (Enter)" AutomationProperties.Name="Enviar mensagem" Click="OnSend"/>
    </Grid>
