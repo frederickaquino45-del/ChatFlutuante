@@ -1,277 +1,359 @@
 using System;
-using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.ComponentModel;
-using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
-using System.Diagnostics;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Text.Json;
 using WindowFloatIA.Agents;
 using WindowFloatIA.Auth;
-using Microsoft.Win32;
 
 namespace WindowFloatIA;
 
-public record Attachment(string Path)
-{
-    public string Name => System.IO.Path.GetFileName(Path);
-}
-public sealed class ChatMessage(string author, string text, string background) : INotifyPropertyChanged
-{
-    public string Author { get; } = author;
-    public string Background { get; } = background;
-    private string _text = text;
-    public string Text { get => _text; set { _text = value; PropertyChanged?.Invoke(this, new(nameof(Text))); } }
-    public event PropertyChangedEventHandler? PropertyChanged;
-}
-
 public partial class MainWindow : Window
 {
-    public ObservableCollection<Attachment> Attachments { get; } = new();
-    public ObservableCollection<ChatMessage> Messages { get; } = new();
-    private double _historyHeight = 300;
-    private bool _expanded;
-    private bool _ready;
+    public ChatWorkspace Workspace { get; } = new();
+    public System.Collections.ObjectModel.ObservableCollection<ChatMessage> Messages => Workspace.Selected.Messages;
+    public Task CurrentRequest => Workspace.Selected.CurrentRequest;
     public bool IsExiting { get; set; }
     private static readonly HttpClient Http = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
-    private readonly ConversationSession _session = new();
     private readonly IChatAgent? _testAgent;
-    private CancellationTokenSource? _request;
     private ChatGptAuth? _auth;
-    private string _model = "";
-    public Task CurrentRequest { get; private set; } = Task.CompletedTask;
+    private IReadOnlyList<ModelChoice> _models = Array.Empty<ModelChoice>();
+    private ChatTab? _displayed;
+    private bool _ready, _syncing, _expanded, _changingSize, _restoringConnection, _connectionStarted;
+    private bool _programmaticScroll, _scrollQueued;
+    private int _scrollVersion;
+    private double _compactWidth, _compactHeight, _expandedWidth, _expandedHeight;
+    private string _lastModel;
+    private readonly CancellationTokenSource _lifetime = new();
 
     public MainWindow() : this(WindowPreferences.Load()) { }
-
     public MainWindow(WindowPreferences settings, IChatAgent? agent = null)
     {
-        InitializeComponent();
-        DataContext = this;
         _testAgent = agent;
-        StatusText.Text = "Entre com ChatGPT para começar";
+        _lastModel = settings.LastModel;
+        _compactWidth = settings.Width;
+        _compactHeight = settings.CompactHeight;
+        _expandedWidth = settings.ExpandedWidth;
+        _expandedHeight = settings.ExpandedHeight;
+        InitializeComponent();
+        DataContext = Workspace;
+        Width = _compactWidth;
+        Height = _compactHeight;
+        Topmost = settings.Topmost;
+        Workspace.Selected.Model = _lastModel;
+        Workspace.Selected.Status = "Entre com ChatGPT para começar";
         if (agent is null)
         {
             try { _auth = new ChatGptAuth(Http, new AuthStore()); }
-            catch { StatusText.Text = "Não foi possível ler a sessão protegida"; }
+            catch { Workspace.Selected.Status = "Não foi possível ler a sessão protegida"; }
         }
-        Width = settings.Width;
-        _historyHeight = settings.HistoryHeight;
-        Topmost = settings.Topmost;
+        else SetModels(new[] { new ModelChoice("test-model", "GPT de teste"), new ModelChoice("other-model", "Outro modelo") });
         if (settings.Left is double left && settings.Top is double top)
         {
             WindowStartupLocation = WindowStartupLocation.Manual;
-            Left = left;
-            Top = top;
+            Left = left; Top = top;
         }
-        Loaded += (_, _) => { _ready = true; FitToScreen(); FocusComposer(); };
-        Activated += (_, _) => { FitToScreen(); FocusComposer(); };
-        IsVisibleChanged += (_, _) => { if (IsVisible) FocusComposer(); };
-        SourceInitialized += (_, _) =>
+        Workspace.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ChatWorkspace.Selected)) DisplaySelected(); };
+        Workspace.ContentChanged += tab =>
         {
-            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(OnWindowMessage);
+            if (tab != Workspace.Selected) return;
+            ApplyExpanded(tab.Expanded);
+            QueueScroll();
         };
-        IsVisibleChanged += (_, _) => { if (!IsVisible && _ready) SavePreferences(); };
-        SizeChanged += (_, _) => { if (_ready) FitToScreen(); };
+        Workspace.BusyChanged += UpdateControls;
+        DisplaySelected();
+        Loaded += async (_, _) =>
+        {
+            _ready = true;
+            FitToScreen(); FocusComposer();
+            if (!_connectionStarted) { _connectionStarted = true; await RestoreConnectionAsync(); }
+        };
+        Activated += (_, _) => FitToScreen();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible) { FocusComposer(); QueueScroll(); }
+            else if (_ready) SavePreferences();
+        };
+        SourceInitialized += (_, _) => HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(OnWindowMessage);
+        SizeChanged += (_, _) =>
+        {
+            if (!_ready || _changingSize) return;
+            RememberSize(); FitToScreen(); QueueScroll();
+        };
     }
 
-    private IntPtr OnWindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    private void DisplaySelected()
     {
-        if (message is 0x007E or 0x02E0) // WM_DISPLAYCHANGE / WM_DPICHANGED
-            Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(FitToScreen));
-        return IntPtr.Zero;
+        if (_displayed is not null)
+        {
+            _displayed.PropertyChanged -= OnTabPropertyChanged;
+        }
+        _scrollVersion++;
+        _programmaticScroll = true;
+        _displayed = Workspace.Selected;
+        _displayed.PropertyChanged += OnTabPropertyChanged;
+        _syncing = true;
+        Composer.Text = _displayed.Draft;
+        TabList.SelectedItem = _displayed;
+        ModelPicker.SelectedValue = _displayed.Model;
+        _syncing = false;
+        TabList.ScrollIntoView(_displayed);
+        ApplyExpanded(_displayed.Expanded);
+        UpdateControls();
+        var version = _scrollVersion;
+        var tab = _displayed;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (version != _scrollVersion) return;
+            HistoryScroll.UpdateLayout();
+            if (tab.FollowTail) HistoryScroll.ScrollToEnd();
+            else HistoryScroll.ScrollToVerticalOffset(tab.ScrollOffset);
+            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+            {
+                if (version != _scrollVersion) return;
+                _programmaticScroll = false;
+                UpdateJumpButton();
+            }));
+        }));
+        FocusComposer();
     }
-
-    private void FocusComposer() => Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => Composer.Focus()));
-    private void OnHideClick(object sender, RoutedEventArgs e) => Hide();
-
+    private void OnTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ChatTab.Draft) && Composer.Text != Workspace.Selected.Draft)
+        {
+            _syncing = true; Composer.Text = Workspace.Selected.Draft; _syncing = false;
+        }
+        UpdateControls();
+    }
+    private void OnTabSelection(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_syncing && TabList.SelectedItem is ChatTab tab && tab != Workspace.Selected) Workspace.Select(tab);
+    }
+    private void OnNewChat(object sender, RoutedEventArgs e) => Workspace.Add(Workspace.Selected.Model);
+    private void OnCloseTab(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is Button { Tag: ChatTab tab }) Workspace.Close(tab);
+    }
+    private void OnTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (SendButton is null) return;
+        if (!_syncing) Workspace.Selected.Draft = Composer.Text;
+        UpdateControls();
+    }
+    private void UpdateControls()
+    {
+        if (SendButton is null) return;
+        var tab = Workspace.Selected;
+        Placeholder.Visibility = Composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SendButton.IsEnabled = !_restoringConnection && (tab.IsBusy || !string.IsNullOrWhiteSpace(tab.Draft));
+        SendButton.Content = tab.IsBusy ? "■" : "↑";
+        SendButton.ToolTip = tab.IsBusy ? "Parar resposta desta aba" : "Enviar (Enter)";
+        System.Windows.Automation.AutomationProperties.SetName(SendButton, tab.IsBusy ? "Parar resposta" : "Enviar mensagem");
+        SettingsButton.IsEnabled = !Workspace.AnyBusy && !_restoringConnection;
+        ModelPicker.IsEnabled = !tab.IsBusy && !_restoringConnection && _models.Count > 0;
+        UpdateJumpButton();
+    }
+    private void OnSend(object sender, RoutedEventArgs e)
+    {
+        if (Workspace.Selected.IsBusy) Workspace.Selected.Request?.Cancel();
+        else SendSelected();
+    }
+    private void SendSelected()
+    {
+        if (_restoringConnection) return;
+        var tab = Workspace.Selected;
+        if (tab.IsBusy || string.IsNullOrWhiteSpace(tab.Draft)) return;
+        if (_testAgent is null && _auth?.IsSignedIn != true)
+        {
+            OnSettings(this, new RoutedEventArgs());
+            if (_auth?.IsSignedIn != true) return;
+            tab = Workspace.Selected;
+        }
+        if (!_models.Any(m => m.Slug == tab.Model))
+        {
+            tab.Status = "Selecione um modelo disponível para esta conversa.";
+            ModelPicker.Focus(); ModelPicker.IsDropDownOpen = true;
+            return;
+        }
+        _ = Workspace.SendAsync(tab, _testAgent ?? new OpenAiAgent(Http, _auth!.GetAccessTokenAsync, tab.Model));
+    }
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape) { Hide(); e.Handled = true; }
         else if (e.Key == Key.Enter && Composer.IsKeyboardFocusWithin && Keyboard.Modifiers == ModifierKeys.None)
+        { SendSelected(); e.Handled = true; }
+    }
+
+    internal void SetModels(IReadOnlyList<ModelChoice> models)
+    {
+        _models = models;
+        _syncing = true;
+        ModelPicker.ItemsSource = models;
+        foreach (var tab in Workspace.Tabs)
         {
-            if (_request is null) CurrentRequest = SendMessageAsync();
-            e.Handled = true;
+            if (tab.Model.Length == 0) tab.Model = models.FirstOrDefault(m => m.Slug == _lastModel)?.Slug ?? models.FirstOrDefault()?.Slug ?? "";
+            else if (!models.Any(m => m.Slug == tab.Model)) { tab.Model = ""; tab.Status = "Modelo indisponível. Escolha outro modelo."; }
         }
+        ModelPicker.SelectedValue = Workspace.Selected.Model;
+        _syncing = false;
+        UpdateControls();
     }
-
-    private void OnClosing(object? sender, CancelEventArgs e)
+    private void OnModelSelection(object sender, SelectionChangedEventArgs e)
     {
-        SavePreferences();
-        if (IsExiting) { _request?.Cancel(); return; }
-        e.Cancel = true;
-        Hide();
-    }
-
-    private void OnDragWindow(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is not Grid) return;
-        DragMove();
-        FitToScreen();
+        if (_syncing || Workspace.Selected.IsBusy || ModelPicker.SelectedItem is not ModelChoice model) return;
+        Workspace.Selected.Model = model.Slug;
+        Workspace.Selected.Status = "Modelo selecionado: " + model.DisplayName;
+        _lastModel = model.Slug;
         SavePreferences();
     }
-
-    private void OnTextChanged(object sender, TextChangedEventArgs e)
+    private async Task RestoreConnectionAsync()
     {
-        if (SendButton is null) return;
-        Placeholder.Visibility = Composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        UpdateSend();
-    }
-
-    private void UpdateSend()
-    {
-        SendButton.IsEnabled = _request is not null || !string.IsNullOrWhiteSpace(Composer.Text);
-        SendButton.Content = _request is not null ? "■" : "↑";
-        SendButton.ToolTip = _request is not null ? "Parar resposta" : "Enviar (Enter)";
-        System.Windows.Automation.AutomationProperties.SetName(SendButton, _request is not null ? "Parar resposta" : "Enviar mensagem");
-        SettingsButton.IsEnabled = NewChatButton.IsEnabled = _request is null;
-    }
-    private void OnSend(object sender, RoutedEventArgs e)
-    {
-        if (_request is not null) _request.Cancel();
-        else CurrentRequest = SendMessageAsync();
-    }
-
-    private async Task SendMessageAsync()
-    {
-        if (_request is not null || string.IsNullOrWhiteSpace(Composer.Text)) return;
-        if (_testAgent is null && (_auth?.IsSignedIn != true || string.IsNullOrEmpty(_model)))
-        {
-            OnSettings(this, new RoutedEventArgs());
-            if (_auth?.IsSignedIn != true || string.IsNullOrEmpty(_model)) return;
-        }
-        var text = Composer.Text.Trim();
-        if (text.Length > 16000) { StatusText.Text = "Limite de 16.000 caracteres por pergunta."; return; }
-        Messages.Add(new ChatMessage("Você", text, "#37333F"));
-        var answer = new ChatMessage("GPT", "Aguardando resposta…", "#303030");
-        Messages.Add(answer);
-        while (Messages.Count > 100) Messages.RemoveAt(0);
-        Composer.Clear();
-        using var request = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-        _request = request;
-        UpdateSend();
-        SetExpanded(true);
-        StatusText.Text = "Aguardando GPT…";
-        var partial = "";
-        var paint = Stopwatch.StartNew();
+        if (_testAgent is not null || _auth?.IsSignedIn != true) return;
+        _restoringConnection = true; UpdateControls();
+        Workspace.Selected.Status = "Restaurando sessão ChatGPT…";
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
         try
         {
-            await _session.AskAsync(_testAgent ?? new OpenAiAgent(Http, _auth!.GetAccessTokenAsync, _model), text, value =>
-            {
-                partial = value;
-                StatusText.Text = "GPT respondendo…";
-                if (paint.ElapsedMilliseconds < 50) return;
-                answer.Text = value;
-                if (HistoryScroll.ScrollableHeight - HistoryScroll.VerticalOffset < 60) HistoryScroll.ScrollToEnd();
-                paint.Restart();
-            }, request.Token);
-            answer.Text = partial;
-            StatusText.Text = "Concluído · contexto recente mantido";
+            SetModels(await _auth.ListModelsAsync(timeout.Token));
+            Workspace.Selected.Status = Workspace.Selected.Model.Length > 0 ? "ChatGPT conectado" : "Selecione um modelo disponível";
         }
-        catch (OperationCanceledException)
-        {
-            answer.Text = partial + "\n\n[Resposta interrompida por cancelamento ou tempo limite.]";
-            StatusText.Text = "Interrompido · você pode enviar outra pergunta";
-        }
-        catch (Exception ex)
-        {
-            var message = ex is AgentException ? ex.Message : "Não foi possível receber a resposta. Verifique a conexão e tente novamente.";
-            answer.Text = partial + "\n\n" + message;
-            StatusText.Text = "Falha · pergunta disponível para tentar novamente";
-            if (string.IsNullOrEmpty(Composer.Text)) Composer.Text = text;
-        }
-        finally
-        {
-            _request = null;
-            UpdateSend();
-        }
-        FocusComposer();
+        catch (Exception ex) { Workspace.Selected.Status = ex is AgentException ? ex.Message : "Não foi possível restaurar a conexão. Abra Conta para tentar novamente."; }
+        finally { _restoringConnection = false; UpdateControls(); }
     }
-
     private void OnSettings(object sender, RoutedEventArgs e)
     {
+        if (Workspace.AnyBusy || _restoringConnection) return;
         try
         {
             _auth ??= new ChatGptAuth(Http, new AuthStore());
             var previous = _auth.Selected?.ClientId;
-            var settings = new AgentSettingsWindow(_auth, _model) { Owner = this };
-            var applied = settings.ShowDialog() == true;
+            var draftBeforeLogin = Workspace.Selected.Draft;
+            var settings = new AgentSettingsWindow(_auth, Workspace.Selected.Model) { Owner = this };
+            settings.ShowDialog();
             if (_auth.Selected?.ClientId != previous || !_auth.IsSignedIn)
             {
-                _session.Clear();
-                Messages.Clear();
-                _model = "";
+                Workspace.Reset();
+                if (previous is null && _auth.IsSignedIn) Workspace.Selected.Draft = draftBeforeLogin;
             }
-            if (applied) _model = settings.Model;
-            StatusText.Text = _auth.IsSignedIn ? "ChatGPT conectado · " + _auth.Selected!.Email : "ChatGPT desconectado";
+            if (_auth.IsSignedIn && settings.Models.Count > 0)
+            {
+                SetModels(settings.Models);
+                if (settings.Model.Length > 0) Workspace.Selected.Model = _lastModel = settings.Model;
+                _syncing = true; ModelPicker.SelectedValue = Workspace.Selected.Model; _syncing = false;
+            }
+            else SetModels(Array.Empty<ModelChoice>());
+            Workspace.Selected.Status = _auth.IsSignedIn ? "ChatGPT conectado" : "ChatGPT desconectado";
+            SavePreferences();
         }
-        catch { StatusText.Text = "Não foi possível acessar a sessão protegida do Windows."; }
-    }
-    private void OnNewChat(object sender, RoutedEventArgs e)
-    {
-        if (_request is not null) return;
-        _session.Clear();
-        Messages.Clear();
-        SetExpanded(false);
-        StatusText.Text = "Nova conversa · contexto limpo";
+        catch { Workspace.Selected.Status = "Não foi possível acessar a sessão protegida do Windows."; }
         FocusComposer();
     }
 
-    private void OnToggleHistory(object sender, RoutedEventArgs e) => SetExpanded(!_expanded);
-    private void SetExpanded(bool expanded)
+    private void OnHistoryScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        _expanded = expanded;
-        HistoryPanel.Height = _historyHeight;
-        HistoryPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
-        HistoryButton.Content = expanded ? "⌄" : "⌃";
+        if (_programmaticScroll || _displayed is null || _displayed != Workspace.Selected) return;
+        var tab = Workspace.Selected;
+        if (e.ExtentHeightChange == 0 && e.ViewportHeightChange == 0 && e.VerticalChange != 0)
+            tab.FollowTail = HistoryScroll.ScrollableHeight - HistoryScroll.VerticalOffset <= 48;
+        tab.ScrollOffset = HistoryScroll.VerticalOffset;
+        if ((e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0) && tab.FollowTail) QueueScroll();
+        UpdateJumpButton();
     }
-
-    private void OnAddAttachment(object sender, RoutedEventArgs e)
+    private void OnHistoryWheel(object sender, MouseWheelEventArgs e)
     {
-        var picker = new OpenFileDialog { Multiselect = true, Title = "Selecionar anexos locais" };
-        if (picker.ShowDialog(this) == true) AddFiles(picker.FileNames);
-        FocusComposer();
+        if (e.Delta > 0) Workspace.Selected.FollowTail = false;
     }
-
-    private void AddFiles(string[] paths)
+    private void OnJumpToEnd(object sender, RoutedEventArgs e) { Workspace.Selected.FollowTail = true; QueueScroll(); }
+    private void UpdateJumpButton()
     {
-        foreach (var path in paths)
+        if (JumpButton is not null) JumpButton.Visibility = !Workspace.Selected.FollowTail && HistoryScroll.ScrollableHeight - HistoryScroll.VerticalOffset > 4 ? Visibility.Visible : Visibility.Collapsed;
+    }
+    private void QueueScroll()
+    {
+        if (_scrollQueued) return;
+        _scrollQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
-            if (Attachments.Count >= 10) break;
-            if (File.Exists(path) && !Attachments.Any(a => string.Equals(a.Path, path, StringComparison.OrdinalIgnoreCase)))
-                Attachments.Add(new Attachment(path));
-        }
-        UpdateSend();
-    }
-    private void OnRemoveAttachment(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: Attachment attachment }) Attachments.Remove(attachment);
-        UpdateSend();
-    }
-    private void OnDragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = DragDropEffects.None;
-        e.Handled = true;
-    }
-    private void OnDrop(object sender, DragEventArgs e)
-    {
-        StatusText.Text = "O agente aceita apenas texto nesta versão.";
-        e.Handled = true;
-    }
-    private void OnWidthResize(object sender, DragDeltaEventArgs e) => Width = Math.Clamp(Width + e.HorizontalChange, MinWidth, 900);
-    private void OnHistoryResize(object sender, DragDeltaEventArgs e)
-    {
-        _historyHeight = Math.Clamp(_historyHeight + e.VerticalChange, 100, 700);
-        HistoryPanel.Height = _historyHeight;
+            _scrollQueued = false;
+            if (!Workspace.Selected.FollowTail || !_expanded) { UpdateJumpButton(); return; }
+            var version = _scrollVersion;
+            _programmaticScroll = true;
+            HistoryScroll.UpdateLayout();
+            HistoryScroll.ScrollToEnd();
+            Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+            {
+                if (version != _scrollVersion) return;
+                _programmaticScroll = false;
+                Workspace.Selected.ScrollOffset = HistoryScroll.VerticalOffset;
+                UpdateJumpButton();
+            }));
+        }));
     }
 
+    private void OnToggleHistory(object sender, RoutedEventArgs e)
+    {
+        Workspace.Selected.Expanded = !Workspace.Selected.Expanded;
+        ApplyExpanded(Workspace.Selected.Expanded); QueueScroll();
+    }
+    private void ApplyExpanded(bool expanded)
+    {
+        if (_expanded != expanded)
+        {
+            RememberSize();
+            _changingSize = true;
+            _expanded = expanded;
+            MinHeight = expanded ? 360 : 230;
+            Width = expanded ? _expandedWidth : _compactWidth;
+            Height = expanded ? _expandedHeight : _compactHeight;
+            _changingSize = false;
+        }
+        HistoryPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        Composer.MaxHeight = expanded ? 120 : Math.Clamp(Height - 194, 36, 120);
+        HistoryButton.Content = expanded ? "⌄" : "⌃";
+        if (_ready) FitToScreen();
+    }
+    private void RememberSize()
+    {
+        if (_expanded) { _expandedWidth = Width; _expandedHeight = Height; }
+        else { _compactWidth = Width; _compactHeight = Height; }
+    }
+    internal void ResizeFromEdge(string edge, double horizontal, double vertical)
+    {
+        var oldWidth = Width; var oldHeight = Height;
+        var width = Math.Clamp(oldWidth + (edge.Contains('L') ? -horizontal : edge.Contains('R') ? horizontal : 0), MinWidth, MaxWidth);
+        var height = Math.Clamp(oldHeight + (edge.Contains('T') ? -vertical : edge.Contains('B') ? vertical : 0), MinHeight, MaxHeight);
+        _changingSize = true;
+        if (edge.Contains('L') && double.IsFinite(Left)) Left += oldWidth - width;
+        if (edge.Contains('T') && double.IsFinite(Top)) Top += oldHeight - height;
+        Width = width; Height = height;
+        Composer.MaxHeight = _expanded ? 120 : Math.Clamp(Height - 194, 36, 120);
+        _changingSize = false;
+        RememberSize();
+        if (_ready) FitToScreen();
+        QueueScroll();
+    }
+    private void OnResize(object sender, DragDeltaEventArgs e) => ResizeFromEdge((string)((Thumb)sender).Tag, e.HorizontalChange, e.VerticalChange);
+    private void OnResizeCompleted(object sender, DragCompletedEventArgs e) => SavePreferences();
+    private void OnDragWindow(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not Grid) return;
+        DragMove(); FitToScreen(); SavePreferences();
+    }
+    private IntPtr OnWindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (message is 0x007E or 0x02E0) Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(FitToScreen));
+        return IntPtr.Zero;
+    }
     private void FitToScreen()
     {
         var source = PresentationSource.FromVisual(this);
@@ -280,15 +362,26 @@ public partial class MainWindow : Window
         var transform = source.CompositionTarget.TransformFromDevice;
         var origin = transform.Transform(new Point(area.Left, area.Top));
         var size = transform.Transform(new Point(area.Width, area.Height));
-        MaxWidth = Math.Max(MinWidth, size.X);
-        if (_expanded)
-        {
-            var available = Math.Max(100, size.Y - (ActualHeight - HistoryPanel.ActualHeight));
-            HistoryPanel.Height = Math.Min(_historyHeight, available);
-        }
-        Left = Math.Clamp(double.IsFinite(Left) ? Left : origin.X, origin.X, Math.Max(origin.X, origin.X + size.X - ActualWidth));
-        Top = Math.Clamp(double.IsFinite(Top) ? Top : origin.Y, origin.Y, Math.Max(origin.Y, origin.Y + size.Y - ActualHeight));
+        MaxWidth = Math.Max(MinWidth, size.X); MaxHeight = Math.Max(MinHeight, size.Y);
+        _changingSize = true;
+        Width = Math.Min(Width, MaxWidth); Height = Math.Min(Height, MaxHeight);
+        Left = Math.Clamp(double.IsFinite(Left) ? Left : origin.X, origin.X, Math.Max(origin.X, origin.X + size.X - Width));
+        Top = Math.Clamp(double.IsFinite(Top) ? Top : origin.Y, origin.Y, Math.Max(origin.Y, origin.Y + size.Y - Height));
+        _changingSize = false;
     }
-    public void SavePreferences() => WindowPreferences.Save(new WindowPreferences(
-        double.IsFinite(Left) ? Left : null, double.IsFinite(Top) ? Top : null, Width, _historyHeight, Topmost));
+    private void FocusComposer() => Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() => { if (IsVisible) Composer.Focus(); }));
+    private void OnHideClick(object sender, RoutedEventArgs e) => Hide();
+    private void OnClosing(object? sender, CancelEventArgs e)
+    {
+        SavePreferences();
+        if (IsExiting) { _lifetime.Cancel(); Workspace.CancelAll(); return; }
+        e.Cancel = true; Hide();
+    }
+    public void SavePreferences()
+    {
+        if (_testAgent is not null) return;
+        RememberSize();
+        WindowPreferences.Save(new WindowPreferences(double.IsFinite(Left) ? Left : null, double.IsFinite(Top) ? Top : null,
+            _compactWidth, 300, Topmost, _compactHeight, _expandedWidth, _expandedHeight, _lastModel));
+    }
 }

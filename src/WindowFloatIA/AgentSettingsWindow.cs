@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -12,6 +13,7 @@ namespace WindowFloatIA;
 public sealed class AgentSettingsWindow : Window
 {
     public string Model { get; private set; }
+    public IReadOnlyList<ModelChoice> Models { get; private set; } = Array.Empty<ModelChoice>();
     private readonly ChatGptAuth _auth;
     private readonly ComboBox _accounts = new() { DisplayMemberPath = "Label", MinHeight = 30 };
     private readonly ComboBox _models = new() { DisplayMemberPath = "DisplayName", MinHeight = 30 };
@@ -40,23 +42,27 @@ public sealed class AgentSettingsWindow : Window
             await _auth.SignInAsync(_accounts.SelectedItem as AccountRegistration, token);
             ReloadAccounts();
             await LoadModelsAsync(token);
+            CompleteLogin();
         });
         AddButton("Adicionar outra conta ou workspace", async token =>
         {
             await _auth.SignInAsync(null, token);
             ReloadAccounts();
             await LoadModelsAsync(token);
+            CompleteLogin();
         });
         AddButton("Usar conta selecionada / atualizar modelos", async token =>
         {
             if (_accounts.SelectedItem is not AccountRegistration account) throw new AgentException("Selecione uma conta ou entre com ChatGPT.");
             _auth.Select(account);
             await LoadModelsAsync(token);
+            CompleteLogin();
         });
         AddButton("Desconectar conta ativa", async token =>
         {
             var revoked = await _auth.SignOutAsync(token);
             _models.ItemsSource = null;
+            Models = Array.Empty<ModelChoice>();
             Model = "";
             _status.Text = revoked ? "Sessão encerrada. O registro foi mantido para um próximo login." : "Sessão removida deste aplicativo. Não foi possível confirmar a revogação remota; desconecte o app também nas configurações do ChatGPT.";
         });
@@ -100,11 +106,19 @@ public sealed class AgentSettingsWindow : Window
     private async Task LoadModelsAsync(CancellationToken token)
     {
         _models.ItemsSource = null;
+        Models = Array.Empty<ModelChoice>();
         var choices = await _auth.ListModelsAsync(token);
+        Models = choices;
         _models.ItemsSource = choices;
         _models.SelectedIndex = choices.Count > 0 ? 0 : -1;
         foreach (var choice in choices) if (choice.Slug == Model) _models.SelectedItem = choice;
         _status.Text = choices.Count > 0 ? "Conectado: " + _auth.Selected!.Label : "Esta conta não retornou modelos disponíveis.";
+    }
+    private void CompleteLogin()
+    {
+        if (_models.SelectedItem is not ModelChoice choice) return;
+        Model = choice.Slug;
+        DialogResult = true;
     }
     private async Task RunAsync(Func<CancellationToken, Task> action)
     {
@@ -113,6 +127,7 @@ public sealed class AgentSettingsWindow : Window
         _operation = operation;
         _actions.IsEnabled = _accounts.IsEnabled = _models.IsEnabled = false;
         _models.ItemsSource = null;
+        Models = Array.Empty<ModelChoice>();
         _status.Text = "Aguardando conexão. Se o navegador abrir, conclua o login e a autorização por lá.";
         try { await action(operation.Token); }
         catch (OperationCanceledException) { _status.Text = "Operação cancelada ou tempo esgotado."; }

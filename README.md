@@ -55,8 +55,8 @@ Validação manual: abrir/esconder com outro aplicativo em foco, testar Esc e fe
 - Enter envia; Shift + Enter insere uma nova linha. O campo cresce até 120 pixels e depois permite rolagem.
 - A conexão GPT aceita apenas texto nesta versão. O botão + fica desativado e arrastar arquivos não faz upload.
 - O histórico visual mantém as últimas 100 mensagens em memória e é descartado ao encerrar.
-- Arraste a faixa superior para mover; a borda direita ajusta a largura; o separador abaixo da conversa ajusta sua altura.
-- Posição, largura, altura da conversa e opção Fixar são salvas em `%LOCALAPPDATA%/WindowFloatIA/window.json` ao esconder ou encerrar. Preferências ausentes ou inválidas usam os valores padrão.
+- Arraste a faixa superior para mover; todas as bordas e cantos ajustam largura e altura, respeitando dimensões mínimas. O histórico ocupa o espaço livre, mantendo a entrada na parte inferior.
+- Posição, dimensões independentes dos modos compacto/expandido, último modelo e opção Fixar são salvos em `%LOCALAPPDATA%/WindowFloatIA/window.json`. Preferências ausentes ou inválidas usam os valores padrão.
 - A janela ajusta sua posição à área útil do monitor ao abrir e em alterações de tela/DPI.
 
 ## Verificação automatizada
@@ -71,7 +71,7 @@ Executa verificações dos componentes WPF e do adaptador HTTP com dados simulad
 
 1. Execute o aplicativo e clique em **GPT**.
 2. Clique em **Continue with ChatGPT** e conclua o login e o consentimento no navegador do sistema.
-3. Escolha um dos modelos retornados para sua conta e clique em **Usar modelo e voltar ao chat**.
+3. Após carregar os modelos, a configuração fecha automaticamente. Escolha o modelo no seletor da própria conversa.
 4. Digite a pergunta e pressione Enter.
 
 A autenticação utiliza OAuth 2 Authorization Code + PKCE e OpenID Connect, pelo fluxo oficial [Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). Não é necessário digitar chave de API; `OPENAI_API_KEY` e `OPENAI_MODEL` não são usados. OAuth ainda utiliza tokens internamente, obtidos e renovados automaticamente após autorização.
@@ -82,6 +82,8 @@ A autenticação utiliza OAuth 2 Authorization Code + PKCE e OpenID Connect, pel
 - Credenciais e registros ficam em `%LOCALAPPDATA%/WindowFloatIA/oauth.dat`, cifrados com DPAPI para o usuário atual do Windows e atualizados por substituição de arquivo. Não copie esse arquivo para outros computadores/usuários. Nunca registre seu conteúdo em logs ou commits.
 - A janela de conexão permite selecionar contas registradas, adicionar outra conta/workspace e desconectar. Trocar a conta ativa limpa o contexto da conversa para evitar enviá-lo a outra conta.
 - A renovação é serializada antes da expiração, persistindo o refresh token substituto. Falha de renovação ou revogação solicita novo login; perguntas não são reenviadas automaticamente.
+- Ao abrir a janela pela primeira vez, a sessão salva é restaurada e os modelos são carregados sem abrir a configuração. O último modelo é restaurado quando ainda está disponível. Falhas mantêm o chat aberto e permitem reconectar pelo botão Conta.
+- O fechamento automático se aplica à janela de configuração do aplicativo; a aba do navegador mostra o retorno e pode ser fechada manualmente. Não depende de permissões do navegador para fechar abas.
 - Desconectar tenta revogar a sessão remota e sempre remove os tokens locais. Caso a revogação não seja confirmada, a interface orienta desconectar também nas configurações do ChatGPT. O registro da conta e o host são mantidos para reautorização.
 
 Modelos são obtidos do catálogo da conta, preservando a ordem e filtrando `visibility: list`. A chamada usa o endpoint público Responses com `store: false`, `stream: true` e histórico em `input`, sem parâmetros incompatíveis como `max_output_tokens` ou `previous_response_id`. Veja [modelos e inferência](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference) e [limitações do fluxo](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations). Disponibilidade e uso dependem das permissões e limites do plano/workspace autorizado.
@@ -97,7 +99,11 @@ A mesma suíte testa PKCE com vetor RFC, callback HTTP local, state incorreto, c
 - A API recebe `store: false`; isso não é uma promessa de retenção zero de dados pelo provedor. O aplicativo não persiste a conversa localmente.
 - O botão de envio vira **Parar**. Esconder a janela mantém a requisição ativa; sair solicita seu cancelamento. Interromper a conexão não garante reversão de processamento/cobrança já ocorridos no servidor.
 - Texto parcial é preservado em falhas e cancelamentos, mas não entra no contexto seguinte. Não há repetição automática. Em erros, o campo recupera a pergunta se você não tiver começado outro rascunho.
-- **Novo** limpa histórico e contexto. Durante uma resposta, configuração e nova conversa ficam bloqueadas; o campo continua disponível para preparar o próximo rascunho.
+- **+ Novo** abre uma aba independente com histórico, contexto, rascunho, modelo, posição de rolagem e cancelamento próprios. Fechar uma aba cancela somente a resposta dela. Fechar a última cria uma nova conversa vazia.
+- Trocar de aba não interrompe respostas. Um indicador sinaliza execução e conteúdo novo nas outras abas. O título é derivado localmente da primeira pergunta, sem chamada adicional à IA.
+- Durante uma resposta, apenas a troca de modelo dessa aba fica bloqueada. Outras abas podem enviar perguntas; a configuração de conta permanece bloqueada enquanto qualquer aba responde para evitar misturar contas.
+- A rolagem acompanha a resposta quando o leitor está próximo ao final. Rolar para cima suspende esse acompanhamento; **↓ Ir para o final** retoma. As atualizações de rolagem são agrupadas e executadas após o layout.
+- Abas e mensagens continuam apenas na memória: são preservadas ao esconder a janela, mas não ao encerrar o processo. A sessão OAuth e as preferências permanecem salvas.
 - O primeiro agente somente responde por texto: não tem ferramentas, acesso ao computador, uploads, pesquisa na web ou ações externas.
 
 Histórico persistente, anexos para IA, ferramentas, comando de voz e inicialização automática ficam para próximas etapas.

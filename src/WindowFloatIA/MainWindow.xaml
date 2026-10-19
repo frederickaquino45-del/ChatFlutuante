@@ -1,12 +1,11 @@
 <Window x:Class="WindowFloatIA.MainWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="WindowFloatIA" Width="560" MinWidth="360" SizeToContent="Height"
+ Title="WindowFloatIA" Width="620" Height="240" MinWidth="420" MinHeight="230"
  WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
  Topmost="True" ShowInTaskbar="False" WindowStartupLocation="CenterScreen"
  Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13"
- PreviewKeyDown="OnPreviewKeyDown" Closing="OnClosing" AllowDrop="True"
- PreviewDragOver="OnDragOver" PreviewDrop="OnDrop">
+ PreviewKeyDown="OnPreviewKeyDown" Closing="OnClosing">
  <Window.Resources>
   <Style TargetType="Button">
    <Setter Property="Foreground" Value="#EEEEEE"/><Setter Property="Background" Value="Transparent"/>
@@ -23,69 +22,84 @@
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
   </Style>
+  <Style x:Key="ResizeHandle" TargetType="Thumb">
+   <Setter Property="Template"><Setter.Value><ControlTemplate><Border Background="Transparent"/></ControlTemplate></Setter.Value></Setter>
+   <EventSetter Event="DragDelta" Handler="OnResize"/>
+   <EventSetter Event="DragCompleted" Handler="OnResizeCompleted"/>
+  </Style>
  </Window.Resources>
- <Border x:Name="Shell" Margin="12" Background="#262626" BorderBrush="#393939" BorderThickness="1" CornerRadius="26" Padding="16,5,16,10">
+ <Grid>
+ <Border x:Name="Shell" Margin="12" Background="#262626" BorderBrush="#393939" BorderThickness="1" CornerRadius="24" Padding="16,8,16,12">
   <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Opacity="0.4"/></Border.Effect>
   <Grid>
-   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="42"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="32"/></Grid.RowDefinitions>
    <Grid Background="Transparent" MouseLeftButtonDown="OnDragWindow">
-    <TextBlock x:Name="StatusText" Text="Configure o GPT para começar" MaxWidth="210" TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" Foreground="#999999" FontSize="10" VerticalAlignment="Center" IsHitTestVisible="False"/>
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-     <Button x:Name="HistoryButton" Content="⌃" ToolTip="Expandir ou recolher conversa" AutomationProperties.Name="Alternar conversa" Click="OnToggleHistory"/>
-     <Button Content="×" FontSize="20" ToolTip="Esconder (Esc)" AutomationProperties.Name="Esconder janela" Click="OnHideClick"/>
-    </StackPanel>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <TextBlock Text="{Binding Selected.Status}" TextTrimming="CharacterEllipsis" Foreground="#CFCFCF" FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
+    <Button Grid.Column="1" x:Name="SettingsButton" Content="Conta" ToolTip="Gerenciar conexão ChatGPT" Click="OnSettings"/>
+    <Button Grid.Column="2" x:Name="HistoryButton" Content="⌃" ToolTip="Expandir ou recolher conversa" AutomationProperties.Name="Alternar conversa" Click="OnToggleHistory"/>
+    <Button Grid.Column="3" Content="×" FontSize="20" ToolTip="Esconder (Esc)" AutomationProperties.Name="Esconder janela" Click="OnHideClick"/>
    </Grid>
-   <Grid x:Name="HistoryPanel" Grid.Row="1" Visibility="Collapsed">
-    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="8"/></Grid.RowDefinitions>
-    <ScrollViewer x:Name="HistoryScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,8,0,8">
-     <ItemsControl ItemsSource="{Binding Messages}">
+   <Grid Grid.Row="1">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <ListBox x:Name="TabList" ItemsSource="{Binding Tabs}" SelectionChanged="OnTabSelection"
+     Background="Transparent" BorderThickness="0" Foreground="#EEEEEE" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+     <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+     <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem">
+      <Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,4,0"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+       <Border x:Name="TabSurface" CornerRadius="8" Padding="6,1" Background="#303030"><ContentPresenter/></Border>
+       <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="#4A405E"/></Trigger></ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+     </Style></ListBox.ItemContainerStyle>
+     <ListBox.ItemTemplate><DataTemplate>
+      <StackPanel Orientation="Horizontal">
+       <TextBlock Text="{Binding Indicator}" Foreground="#B9ABFF" VerticalAlignment="Center" Margin="0,0,4,0"/>
+       <TextBlock Text="{Binding Title}" Foreground="#EEEEEE" MaxWidth="145" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Title}"/>
+       <Button Content="×" Tag="{Binding}" Click="OnCloseTab" ToolTip="Fechar conversa" AutomationProperties.Name="Fechar conversa" Padding="6,0"/>
+      </StackPanel>
+     </DataTemplate></ListBox.ItemTemplate>
+    </ListBox>
+    <Button Grid.Column="1" x:Name="NewChatButton" Content="+ Novo" ToolTip="Abrir nova conversa" Click="OnNewChat"/>
+   </Grid>
+   <Grid x:Name="HistoryPanel" Grid.Row="2" Visibility="Collapsed" Margin="0,6,0,8">
+    <ScrollViewer x:Name="HistoryScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+     ScrollChanged="OnHistoryScrollChanged" PreviewMouseWheel="OnHistoryWheel">
+     <ItemsControl x:Name="MessageList" ItemsSource="{Binding Selected.Messages}">
       <ItemsControl.ItemTemplate><DataTemplate>
        <Border Background="{Binding Background}" CornerRadius="12" Padding="12" Margin="0,0,5,10">
-        <StackPanel><TextBlock Text="{Binding Author}" Foreground="#AFA7FF" FontWeight="SemiBold" FontSize="11"/>
+        <StackPanel><TextBlock Text="{Binding Author}" Foreground="#B9ABFF" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
          <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,6,0,0"/>
         </StackPanel>
        </Border>
       </DataTemplate></ItemsControl.ItemTemplate>
      </ItemsControl>
     </ScrollViewer>
-    <Thumb Grid.Row="1" Cursor="SizeNS" DragDelta="OnHistoryResize" ToolTip="Ajustar altura da conversa">
-     <Thumb.Template><ControlTemplate><Border Background="Transparent"><Border Height="2" Width="36" Background="#555555" CornerRadius="1"/></Border></ControlTemplate></Thumb.Template>
-    </Thumb>
+    <Button x:Name="JumpButton" Content="↓ Ir para o final" Background="#51456A" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,20,8" Click="OnJumpToEnd"/>
    </Grid>
-   <Grid Grid.Row="2" Margin="0,5,0,6">
+   <Grid Grid.Row="3" Margin="0,6,0,8" MinHeight="36" MaxHeight="120">
     <TextBox x:Name="Composer" Background="Transparent" Foreground="#EEEEEE" CaretBrush="White"
-     BorderThickness="0" Padding="0" MinHeight="30" MaxHeight="120" AcceptsReturn="True"
-     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="OnTextChanged"
-     AutomationProperties.Name="Mensagem"/>
-    <TextBlock x:Name="Placeholder" Text="Pergunte ao GPT…" Foreground="#BDBDBD"
-     IsHitTestVisible="False" Margin="2,2,0,0" TextWrapping="Wrap"/>
+     BorderThickness="0" Padding="0" MinHeight="36" MaxHeight="120" AcceptsReturn="True"
+     TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="OnTextChanged" AutomationProperties.Name="Mensagem"/>
+    <TextBlock x:Name="Placeholder" Text="Pergunte ao GPT…" Foreground="#BDBDBD" IsHitTestVisible="False" Margin="2,2,0,0"/>
    </Grid>
-   <ScrollViewer Grid.Row="3" MaxHeight="76" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-    <ItemsControl ItemsSource="{Binding Attachments}">
-     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-     <ItemsControl.ItemTemplate><DataTemplate>
-      <Border Background="#383838" CornerRadius="8" Margin="0,0,6,6" Padding="6,0">
-       <StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Name}" MaxWidth="220" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Path}"/>
-        <Button Content="×" Tag="{Binding}" Click="OnRemoveAttachment" AutomationProperties.Name="Remover anexo"/>
-       </StackPanel>
-      </Border>
-     </DataTemplate></ItemsControl.ItemTemplate>
-    </ItemsControl>
-   </ScrollViewer>
    <Grid Grid.Row="4">
-    <StackPanel Orientation="Horizontal">
-     <TextBlock Text="✦" Foreground="#AAA0FF" FontSize="23" VerticalAlignment="Center" Margin="2,0,10,0"/>
-     <Button Content="+" FontSize="23" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="Anexos estarão disponíveis em uma próxima versão" AutomationProperties.Name="Anexos indisponíveis"/>
-     <Button x:Name="SettingsButton" Content="GPT" ToolTip="Entrar com ChatGPT e escolher modelo" Click="OnSettings"/>
-     <Button x:Name="NewChatButton" Content="Novo" ToolTip="Limpar conversa e contexto" Click="OnNewChat"/>
-     <CheckBox Content="Fixar" IsChecked="{Binding Topmost, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="10,0,0,0" ToolTip="Manter acima das outras janelas"/>
-    </StackPanel>
-    <Button x:Name="SendButton" Content="↑" FontSize="20" HorizontalAlignment="Right" Background="#6257A6"
-     Width="34" IsEnabled="False" ToolTip="Enviar (Enter)" AutomationProperties.Name="Enviar mensagem" Click="OnSend"/>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <TextBlock Text="✦" Foreground="#AAA0FF" FontSize="23" VerticalAlignment="Center" Margin="0,0,10,0"/>
+    <ComboBox x:Name="ModelPicker" Grid.Column="1" MaxWidth="260" MinWidth="100" HorizontalAlignment="Left" VerticalAlignment="Center"
+     DisplayMemberPath="DisplayName" SelectedValuePath="Slug" SelectionChanged="OnModelSelection" ToolTip="Modelo desta conversa" AutomationProperties.Name="Modelo GPT"/>
+    <CheckBox Grid.Column="2" Content="Fixar" IsChecked="{Binding Topmost, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="12,0"/>
+    <Button Grid.Column="3" x:Name="SendButton" Content="↑" FontSize="20" Background="#6257A6" Width="34" IsEnabled="False" ToolTip="Enviar (Enter)" AutomationProperties.Name="Enviar mensagem" Click="OnSend"/>
    </Grid>
-   <Thumb Grid.RowSpan="5" Width="6" HorizontalAlignment="Right" Margin="0,25,-13,12" Cursor="SizeWE" DragDelta="OnWidthResize">
-    <Thumb.Template><ControlTemplate><Border Background="Transparent"/></ControlTemplate></Thumb.Template>
-   </Thumb>
   </Grid>
  </Border>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="L" Cursor="SizeWE" Width="8" HorizontalAlignment="Left" Margin="9,28,0,28"/>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="R" Cursor="SizeWE" Width="8" HorizontalAlignment="Right" Margin="0,28,9,28"/>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="T" Cursor="SizeNS" Height="8" VerticalAlignment="Top" Margin="28,9,28,0"/>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="B" Cursor="SizeNS" Height="8" VerticalAlignment="Bottom" Margin="28,0,28,9"/>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="LT" Cursor="SizeNWSE" Width="18" Height="18" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="9"/>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="RT" Cursor="SizeNESW" Width="18" Height="18" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="9"/>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="LB" Cursor="SizeNESW" Width="18" Height="18" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="9"/>
+ <Thumb Style="{StaticResource ResizeHandle}" Tag="RB" Cursor="SizeNWSE" Width="18" Height="18" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="9"/>
+ </Grid>
 </Window>
