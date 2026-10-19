@@ -1,140 +1,126 @@
-﻿# WindowFloatIA
+# Wfloat.IA
 
-Base de aplicativo Windows em C# / .NET 10 / WPF, sem pacotes NuGet externos e sem navegador embutido.
+![Wfloat.IA](src/WindowFloatIA/Assets/logo-flat.png)
 
-## Executar
+Chat flutuante para Windows: converse com diferentes provedores de IA sem sair do aplicativo em que está trabalhando. Feito em C# e WPF, com .NET 10, ícone na bandeja e atalho global.
 
-Requer Windows e SDK .NET 10 com suporte ao Windows Desktop.
+## O que faz
+
+- Abre e esconde o chat com um atalho configurável; padrão **Ctrl + Alt + Espaço**.
+- Mantém conversas em abas e restaura até cinco conversas recentes por conexão.
+- Mostra respostas em streaming, com Markdown e fórmulas básicas.
+- Permite escolher conexão e modelo em cada conversa.
+- Oferece tema claro/escuro, cor de destaque, janela redimensionável e opção de manter acima de outras janelas.
+- Pode iniciar com o Windows, escondido na bandeja.
+
+## Instalar e abrir
+
+Use Windows 11 x64 para a experiência visual completa. O aplicativo também usa APIs do Windows 10; a aparência das bordas depende da versão do sistema. ARM64 exige uma compilação específica.
+
+1. Obtenha o pacote `WfloatIA-win-x64.zip` de uma distribuição do mantenedor. Se ainda não houver uma release, compile pelo procedimento abaixo. O workflow **Windows CI** também disponibiliza o pacote como artefato nas execuções bem-sucedidas do GitHub Actions.
+2. Extraia **todo o ZIP** para uma pasta permanente, por exemplo `C:\Apps\WfloatIA`.
+3. Abra `WindowFloatIA.exe`. Mantenha as DLLs e os demais arquivos ao lado dele.
+4. Use a engrenagem para configurar uma conta ou conexão de IA.
+
+O pacote gerado pelo script inclui o .NET: não é necessário instalar o runtime separadamente. Ele é portátil, não possui instalador nem assinatura digital. Baixe somente de uma origem em que confie. Para atualizar, encerre pelo menu da bandeja e substitua os arquivos da pasta; seus dados ficam separados.
+
+## Usar o chat
+
+| Ação | Como fazer |
+| --- | --- |
+| Mostrar ou esconder | Ctrl + Alt + Espaço, ou duplo clique no ícone da bandeja |
+| Encerrar de verdade | Botão direito no ícone da bandeja → Sair |
+| Criar conversa | Botão + na área de abas |
+| Trocar de conversa | Clique na aba |
+| Escolher IA | Selecione a conexão e o modelo no rodapé |
+| Seguir a resposta | A rolagem acompanha o texto quando você está próximo ao final |
+| Ler mensagens antigas | Role para cima; use “Ir para o final” para retomar o acompanhamento |
+
+Fechar ou esconder o chat mantém o aplicativo na bandeja. Apenas uma instância pode ficar aberta por sessão do Windows. A integração OpenCode funciona como chat, com ferramentas desabilitadas.
+
+## Configurar as IAs
+
+Abra **Configurações → Conta**. O ChatGPT tem gerenciamento próprio; as demais conexões ficam em **Claude, Ollama, OpenCode e outros**. As conexões salvas aparecem à esquerda: clique para editar ou use **Nova conexão**. Teste a conexão e depois salve para carregar os modelos.
+
+| Provedor | Configuração |
+| --- | --- |
+| ChatGPT | Entre pelo fluxo OAuth apresentado pelo aplicativo e selecione um modelo disponível na conta. |
+| Claude | Informe uma chave da API Anthropic e use `https://api.anthropic.com`. Uma assinatura do chat Claude não substitui a chave da API. |
+| Ollama / Qwen | Inicie o Ollama, instale o modelo desejado e use `http://127.0.0.1:11434`. Normalmente não exige chave localmente. |
+| OpenCode | Use a URL de um servidor OpenCode e suas credenciais, quando exigidas. Os modelos vêm dos provedores configurados nele. |
+| API compatível | Informe a URL da API, geralmente terminada em `/v1`, e a chave exigida pelo servidor. |
+
+O aplicativo não inclui créditos, não baixa modelos e não inicia esses servidores automaticamente. Custos e acesso aos modelos dependem do provedor. Em modelos locais, o consumo de RAM/GPU é principalmente do servidor de inferência.
+
+### OpenCode: servidor separado
+
+No PowerShell, defina sua própria senha e inicie o servidor:
 
 ```powershell
-dotnet run --project src/WindowFloatIA
+$env:OPENCODE_SERVER_PASSWORD = 'SUBSTITUA-POR-UMA-SENHA-SUA'
+opencode serve --hostname 127.0.0.1 --port 4096
 ```
 
-Para iniciar escondido na bandeja:
+Mantenha o terminal aberto. Configure URL `http://127.0.0.1:4096`, usuário `opencode` e a senha escolhida. A senha é do servidor, não da conta GPT/Claude.
+
+O OpenCode Desktop pode usar uma porta dinâmica e um prefixo `/api`, com autenticação própria. Abrir o desktop não significa que exista um servidor na porta 4096. Alguns modelos gratuitos recusam integrações externas com HTTP 403: nesse caso, escolha um provedor autorizado ou um modelo local. Consulte o [guia completo de conexões](CONEXOES.md).
+
+## Preferências do Windows
+
+Em **Configurações → Preferências → Inicialização e atalho**:
+
+- Ative **Iniciar junto com o Windows** para abrir na bandeja ao entrar no sistema. A opção começa desativada e só altera a configuração do usuário atual.
+- Clique no campo de atalho, pressione a combinação desejada e clique em **Aplicar atalho**. Se houver conflito, o atalho anterior permanece ativo.
+- Para voltar ao padrão, use **Restaurar Ctrl + Alt + Espaço** e aplique.
+
+Ative a inicialização somente depois de colocar o aplicativo na pasta definitiva. Se mover a pasta, desative e ative novamente essa opção.
+
+## Dados e privacidade
+
+Configurações e histórico ficam em `%LOCALAPPDATA%/WindowFloatIA`. Credenciais e histórico são protegidos com DPAPI, vinculados ao usuário do Windows; preferências visuais e de atalho ficam em JSON. Não compartilhe essa pasta.
+
+As perguntas são enviadas ao provedor selecionado. Servidores remotos e o OpenCode podem guardar dados conforme sua própria configuração; apagar histórico local não remove sessões remotas. Desconectar uma conta não equivale a revogar uma chave no provedor.
+
+## Compilar a partir do código
+
+Requisitos: Windows, Git e **SDK .NET 10** com suporte a Windows Desktop.
 
 ```powershell
-dotnet run --project src/WindowFloatIA -- --background
+git clone https://github.com/frederickaquino45-del/ChatFlutuante.git
+cd ChatFlutuante
+dotnet build WindowFloatIA.slnx -c Release
+dotnet run --project src/WindowFloatIA -c Release
 ```
 
-## Controles
-
-- `Ctrl + Alt + Espaço`: mostra ou esconde a janela (atalho global).
-- `Esc`, botão Esconder ou fechar a janela: esconde sem encerrar.
-- Clique duplo no ícone da bandeja: mostra ou esconde.
-- Menu da bandeja → Sair: encerra e libera o atalho.
-- Opção na janela: ativa/desativa a exibição acima das outras janelas.
-- Apenas uma instância por sessão do Windows. Ao executar novamente, uma mensagem informa como acessar a instância aberta.
-
-Se o atalho estiver ocupado, o aplicativo avisa e permanece acessível pela bandeja.
-
-## Compilar e publicar
+Para gerar o executável portátil com runtime incluído, ZIP e checksum SHA-256:
 
 ```powershell
-dotnet build src/WindowFloatIA -c Release
-dotnet publish src/WindowFloatIA -c Release -r win-x64 --self-contained false -o artifacts/publish
+./scripts/publish.ps1
+# Opcional: compilar especificamente para ARM64
+./scripts/publish.ps1 -Runtime win-arm64
 ```
 
-A publicação acima requer .NET 10 Desktop Runtime no computador de destino. Use `--self-contained true` para incluir o runtime (distribuição maior).
+Saída padrão: `artifacts/WfloatIA-win-x64/WindowFloatIA.exe` e `artifacts/WfloatIA-win-x64.zip`. A compilação ARM64 não foi validada em hardware ARM64.
 
-## Estrutura
-
-- `App.xaml.cs`: ciclo de vida, instância única e bandeja.
-- `GlobalHotKey.cs`: atalho usando RegisterHotKey e janela de mensagens Win32.
-- `MainWindow.xaml`: interface WPF nativa, redimensionável.
-
-## Consumo e validação
-
-Em repouso, não há polling, animações contínuas ou consultas de rede. O atalho é recebido por eventos do Windows. Durante uma pergunta, há uma conexão HTTP de streaming e um limite de tempo de três minutos. A janela escondida permanece em memória para reabrir rapidamente; consumo real deve ser medido na máquina de destino.
-
-Validação manual: abrir/esconder com outro aplicativo em foco, testar Esc e fechar, alternar Topmost, testar início com `--background`, tentar abrir uma segunda instância e encerrar pela bandeja. Medir CPU e memória após aquecimento, em repouso e depois de vários ciclos de abertura.
-
-## Chat flutuante — primeira versão
-
-- Interface grafite sem barra de título, com cantos arredondados e sombra.
-- Estado compacto e histórico expansível. O envio abre a conversa; o botão no topo recolhe sem apagar.
-- Enter envia; Shift + Enter insere uma nova linha. O campo cresce até 120 pixels e depois permite rolagem.
-- A conexão GPT aceita apenas texto nesta versão. O botão + Novo cria uma conversa; arrastar arquivos não faz upload.
-- O histórico visual mantém as últimas 100 mensagens por conversa. Até cinco conversas recentes são salvas localmente e restauradas ao abrir.
-- Arraste a faixa superior para mover; todas as bordas e cantos ajustam largura e altura, respeitando dimensões mínimas. O histórico ocupa o espaço livre, mantendo a entrada na parte inferior.
-- Posição, dimensões independentes dos modos compacto/expandido, último modelo e opção Fixar são salvos em `%LOCALAPPDATA%/WindowFloatIA/window.json`. Preferências ausentes ou inválidas usam os valores padrão.
-- A janela ajusta sua posição à área útil do monitor ao abrir e em alterações de tela/DPI.
-
-## Verificação automatizada
+Para executar os testes:
 
 ```powershell
 dotnet run --project tests/WindowFloatIA.Smoke -c Release
 ```
 
-Executa verificações dos componentes WPF e do adaptador HTTP com dados simulados: streaming SSE, histórico, cancelamento, exclusão de turnos incompletos do contexto, bloqueio de envios simultâneos, erros 401/429/500, recusa e conexão truncada. Nenhuma chave ou chamada real é usada. Gera imagens fora da tela em `artifacts/previews/`. Os testes não substituem a validação manual de atalhos globais, bandeja, monitores/DPI e uma chamada autenticada.
+Os testes de provedores usam respostas simuladas, sem gerar cobranças de inferência. Conexões reais dependem de credenciais e disponibilidade externas.
 
-## Conectar o primeiro agente GPT
+## Solução de problemas
 
-1. Execute o aplicativo e clique na **engrenagem > Gerenciar contas e modelos do ChatGPT**.
-2. Clique em **Continue with ChatGPT** e conclua o login e o consentimento no navegador do sistema.
-3. Após carregar os modelos, a configuração fecha automaticamente. Escolha o modelo no seletor da própria conversa.
-4. Digite a pergunta e pressione Enter.
+- **O aplicativo já está aberto:** procure o ícone na bandeja e use Mostrar/esconder.
+- **Atalho indisponível:** altere a combinação nas preferências.
+- **Não foi possível conectar:** confira o servidor, a porta e a URL base.
+- **Resposta HTML:** a URL aponta para uma página, não para a API.
+- **HTTP 401/403:** confira credenciais e permissões; modelos gratuitos do OpenCode podem proibir uso por integração.
+- **Nenhum modelo disponível:** configure o provedor ou instale um modelo no Ollama e atualize o catálogo.
 
-A autenticação utiliza OAuth 2 Authorization Code + PKCE e OpenID Connect, pelo fluxo oficial [Sign in with ChatGPT](https://developers.openai.com/siwc/token-sharing-open-source/sign-in). Não é necessário digitar chave de API; `OPENAI_API_KEY` e `OPENAI_MODEL` não são usados. OAuth ainda utiliza tokens internamente, obtidos e renovados automaticamente após autorização.
+## Contribuir e licença
 
-- O navegador retorna para um listener temporário ligado apenas a `127.0.0.1`, em uma porta disponível e caminho `/auth/callback`. O mesmo endereço é enviado na autorização e na troca do código. O listener fecha ao concluir, cancelar ou após cinco minutos.
-- Cada tentativa usa `state`, `nonce` e verifier aleatórios. A identidade é verificada por assinatura RSA/SHA-256 contra o JWKS do emissor, issuer, audience, validade e nonce; a permissão `chatgpt.tokens.use.direct` é necessária para perguntas.
-- O primeiro login utiliza registro dinâmico com o nome real do aplicativo. O client ID emitido é guardado por conta; logins seguintes reutilizam esse registro e o identificador estável deste host. Não há client secret embutido nem reutilização de credenciais do Codex.
-- Credenciais e registros ficam em `%LOCALAPPDATA%/WindowFloatIA/oauth.dat`, cifrados com DPAPI para o usuário atual do Windows e atualizados por substituição de arquivo. Não copie esse arquivo para outros computadores/usuários. Nunca registre seu conteúdo em logs ou commits.
-- A janela de conexão permite selecionar contas registradas, adicionar outra conta/workspace e desconectar. Trocar a conta ativa limpa o contexto da conversa para evitar enviá-lo a outra conta.
-- A renovação é serializada antes da expiração, persistindo o refresh token substituto. Falha de renovação ou revogação solicita novo login; perguntas não são reenviadas automaticamente.
-- Ao abrir a janela pela primeira vez, a sessão salva é restaurada e os modelos são carregados sem abrir a configuração. O último modelo é restaurado quando ainda está disponível. Falhas mantêm o chat aberto e permitem reconectar pelo botão Conta.
-- O fechamento automático se aplica à janela de configuração do aplicativo; a aba do navegador mostra o retorno e pode ser fechada manualmente. Não depende de permissões do navegador para fechar abas.
-- Desconectar tenta revogar a sessão remota e sempre remove os tokens locais. Caso a revogação não seja confirmada, a interface orienta desconectar também nas configurações do ChatGPT. O registro da conta e o host são mantidos para reautorização.
+Contribuições são feitas por **pull request** para `master`. Veja [CONTRIBUTING.md](CONTRIBUTING.md). Use issues para relatar problemas, removendo dados pessoais e credenciais das capturas.
 
-Modelos são obtidos do catálogo da conta, preservando a ordem e filtrando `visibility: list`. A chamada usa o endpoint público Responses com `store: false`, `stream: true` e histórico em `input`, sem parâmetros incompatíveis como `max_output_tokens` ou `previous_response_id`. Veja [modelos e inferência](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference) e [limitações do fluxo](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations). Disponibilidade e uso dependem das permissões e limites do plano/workspace autorizado.
-
-### Testes OAuth
-
-A mesma suíte testa PKCE com vetor RFC, callback HTTP local, state incorreto, consentimento negado, client ID incompatível, JWT assinado e adulterado, audience/issuer/nonce/expiração, renovação concorrente, catálogo da conta, revogação e armazenamento DPAPI. Os testes não abrem um navegador, não autorizam contas e não usam tokens reais. O primeiro login e uma resposta real precisam ser validados interativamente pelo usuário.
-
-### Fluxo e limites
-
-- `IChatAgent` define o contrato para futuros provedores; `OpenAiAgent` implementa a chamada HTTPS/SSE usando HttpClient, sem dependências externas.
-- `ConversationSession` mantém até dez pares de pergunta/resposta concluídos, limitados também a 64.000 caracteres. Cada pergunta aceita até 16.000 caracteres; o envio inclui esse contexto recente. Esses limites são em caracteres, não tokens.
-- A API recebe `store: false`; isso não é uma promessa de retenção zero de dados pelo provedor. O aplicativo mantém até cinco conversas recentes em armazenamento local protegido pelo Windows.
-- O botão de envio vira **Parar**. Esconder a janela mantém a requisição ativa; sair solicita seu cancelamento. Interromper a conexão não garante reversão de processamento/cobrança já ocorridos no servidor.
-- Texto parcial é preservado em falhas e cancelamentos, mas não entra no contexto seguinte. Não há repetição automática. Em erros, o campo recupera a pergunta se você não tiver começado outro rascunho.
-- **+ Novo** abre uma aba independente com histórico, contexto, rascunho, modelo, posição de rolagem e cancelamento próprios. Fechar uma aba cancela somente a resposta dela. Fechar a última cria uma nova conversa vazia.
-- Trocar de aba não interrompe respostas. Um indicador sinaliza execução e conteúdo novo nas outras abas. O título é derivado localmente da primeira pergunta, sem chamada adicional à IA.
-- Durante uma resposta, apenas a troca de modelo dessa aba fica bloqueada. Outras abas podem enviar perguntas; a configuração de conta permanece bloqueada enquanto qualquer aba responde para evitar misturar contas.
-- A rolagem acompanha a resposta quando o leitor está próximo ao final. Rolar para cima suspende esse acompanhamento; **↓ Ir para o final** retoma. As atualizações de rolagem são agrupadas e executadas após o layout.
-- Até cinco conversas recentes por conta são restauradas ao reabrir, com mensagens, rascunho, modelo e contexto concluído. Fechar uma aba preserva seu histórico; conversas mais antigas saem do armazenamento quando excedem o limite de cinco. Os arquivos ficam em `%LOCALAPPDATA%/WindowFloatIA/history`, cifrados com DPAPI. Respostas interrompidas não entram no contexto enviado ao agente.
-- As conexoes desta versao somente respondem por texto: não tem ferramentas, acesso ao computador, uploads, pesquisa na web ou ações externas.
-
-Anexos para IA, ferramentas, comando de voz e inicialização automática ficam para próximas etapas.
-
-## Aparencia e configuracoes
-
-A engrenagem centraliza contas e o agente ChatGPT, a opcao de manter a janela acima dos outros aplicativos e a aparencia. Os temas Claro/Escuro e destaques Violeta/Azul/Verde sao aplicados imediatamente e persistidos nas preferencias. Claude, Ollama, OpenCode e servidores compativeis podem ser configurados na mesma secao.
-
-Os botoes do chat usam icones Fluent com descricoes ao passar o mouse e nomes acessiveis. O seletor de modelos acompanha o tema escolhido.
-
-## Markdown nas respostas
-
-As respostas usam renderizacao nativa de Markdown basico: titulos, negrito, italico, listas, citacoes, separadores e codigo em linha ou cercado por crases. Mensagens do usuario permanecem literais. Links exibem o rotulo e o endereco ao passar o mouse. HTML e imagens remotas nao sao executados/carregados; tabelas e extensoes avancadas permanecem como texto. O historico conserva o Markdown original.
-
-A rolagem usa um indicador fino, sem setas, com contraste no hover e cores acompanhando o tema.
-
-Formulas LaTeX comuns entre `\( ... \)`, `\[ ... \]` ou `$$ ... $$` recebem formatacao nativa: fracoes, raizes, expoentes, indices e simbolos matematicos. Expressoes incompletas ou comandos nao suportados preservam o texto original; nao e um motor LaTeX completo. Blocos de codigo permanecem literais.
-
-## Multiplos provedores
-
-Consulte [Conexoes de IA](CONEXOES.md) para configurar Claude, Ollama/Qwen, OpenCode e servidores compativeis, incluindo autenticacao, historico por conexao e limites de validacao. O ChatGPT existente permanece disponivel por OAuth.
-
-
-## Identidade visual e integração com Windows
-
-As imagens Wfloat.IA estão incorporadas em `Assets`: ícone multirresolução no executável, bandeja e janelas, além das marcas nas configurações. As janelas nativas de configurações, contas e conexões usam a cor do tema na barra de título e na borda (DWM; cores personalizadas disponíveis no Windows 11, título escuro no Windows 10 compatível). A janela flutuante conserva sua moldura própria.
-
-Em **Configurações → Preferências → Inicialização e atalho**:
-
-- **Iniciar junto com o Windows** registra somente o usuário atual e abre na bandeja, com `--background`. Desmarcar remove o registro. Não exige administrador. Ative a opção com o executável em sua pasta definitiva; após movê-lo, desative e ative novamente.
-- Clique no campo de atalho, pressione a combinação e use **Aplicar atalho**. A alteração é imediata e persistente. Combinações indisponíveis preservam o atalho anterior. O padrão continua Ctrl + Alt + Espaço.
-- As preferências do atalho são independentes do histórico e das dimensões da janela. A bandeja informa o atalho atual.
-
-A inicialização automática não é ativada pela instalação ou pelos testes. Reinicie o aplicativo para carregar uma versão compilada nova.
+Distribuído sob a [licença MIT](LICENSE). O projeto é independente e não é afiliado aos provedores de IA integrados.
