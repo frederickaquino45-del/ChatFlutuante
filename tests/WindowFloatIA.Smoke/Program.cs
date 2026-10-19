@@ -138,6 +138,15 @@ internal static class Program
         Assert(savedPin == false && savedTheme == "Claro" && savedAccent == "Azul", "Preferences apply pin, theme and accent immediately");
         Render(preferences, "preferences-light");
         System.Threading.Tasks.Task.Run(HistoryChecks.RunAsync).GetAwaiter().GetResult();
+        var markdown = new MarkdownTextBlock { SourceText = "## Title\n**bold** and `code`\n- item\n```cs\nvar x = 1;\n```" };
+        var rendered = new System.Windows.Documents.TextRange(markdown.ContentStart, markdown.ContentEnd).Text;
+        Assert(rendered.Contains("Title") && rendered.Contains("var x = 1;") && !rendered.Contains("**") && !rendered.Contains("##") && !rendered.Contains("```"), "Markdown renders headings, emphasis, lists and code without delimiters");
+        markdown.RenderMarkdown = false;
+        Assert(new System.Windows.Documents.TextRange(markdown.ContentStart, markdown.ContentEnd).Text.Contains("**bold**"), "User text preserves literal Markdown");
+        var preview = new MainWindow(new WindowPreferences(), new TestAgent());
+        preview.Workspace.Selected.Messages.Add(new ChatMessage("GPT", "## Resumo\n\nUma resposta com **destaques** e *enfase*.\n\n### Proximos passos\n- Organizar as ideias\n- Revisar o resultado\n\n> Uma observacao importante.\n\n```csharp\nvar mensagem = \"Ola!\";\nConsole.WriteLine(mensagem);\n```", "#303030"));
+        ((Button)preview.FindName("HistoryButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Render(preview, "markdown");
         LoginWindowChecks.Run();
         System.Threading.Tasks.Task.Run(AgentChecks.RunAsync).GetAwaiter().GetResult();
         System.Threading.Tasks.Task.Run(AuthChecks.RunAsync).GetAwaiter().GetResult();

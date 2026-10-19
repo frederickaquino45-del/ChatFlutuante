@@ -17,6 +17,7 @@ public abstract class ObservableState : INotifyPropertyChanged
 public sealed class ChatMessage(string author, string text, string background) : ObservableState
 {
     public string Author { get; } = author;
+    public bool IsAssistant => Author.StartsWith("GPT", StringComparison.Ordinal);
     public string Background { get; } = background;
     private string _text = text;
     public string Text { get => _text; set { _text = value; Changed(nameof(Text)); } }

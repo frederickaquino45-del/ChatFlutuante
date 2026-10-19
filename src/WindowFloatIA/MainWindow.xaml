@@ -1,5 +1,6 @@
 <Window x:Class="WindowFloatIA.MainWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:local="clr-namespace:WindowFloatIA"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  Title="WindowFloatIA" Width="620" Height="240" MinWidth="420" MinHeight="230"
  WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
@@ -72,7 +73,7 @@
       <ItemsControl.ItemTemplate><DataTemplate>
        <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="12" Padding="12" Margin="0,0,5,10">
         <StackPanel><TextBlock Text="{Binding Author}" Foreground="{DynamicResource AccentTextBrush}" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
-         <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+         <local:MarkdownTextBlock SourceText="{Binding Text}" RenderMarkdown="{Binding IsAssistant}" TextWrapping="Wrap" LineHeight="21" Margin="0,8,0,0"/>
         </StackPanel>
        </Border>
       </DataTemplate></ItemsControl.ItemTemplate>

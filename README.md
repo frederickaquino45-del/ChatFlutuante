@@ -113,3 +113,9 @@ Anexos para IA, ferramentas, comando de voz e inicialização automática ficam 
 A engrenagem centraliza contas e o agente ChatGPT, a opcao de manter a janela acima dos outros aplicativos e a aparencia. Os temas Claro/Escuro e destaques Violeta/Azul/Verde sao aplicados imediatamente e persistidos nas preferencias. Outros provedores de agentes ainda nao foram implementados.
 
 Os botoes do chat usam icones Fluent com descricoes ao passar o mouse e nomes acessiveis. O seletor de modelos acompanha o tema escolhido.
+
+## Markdown nas respostas
+
+As respostas usam renderizacao nativa de Markdown basico: titulos, negrito, italico, listas, citacoes, separadores e codigo em linha ou cercado por crases. Mensagens do usuario permanecem literais. Links exibem o rotulo e o endereco ao passar o mouse. HTML e imagens remotas nao sao executados/carregados; tabelas e extensoes avancadas permanecem como texto. O historico conserva o Markdown original.
+
+A rolagem usa um indicador fino, sem setas, com contraste no hover e cores acompanhando o tema.
