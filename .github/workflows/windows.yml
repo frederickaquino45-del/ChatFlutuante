@@ -1,0 +1,32 @@
+name: Windows CI
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test:
+    name: Windows build and tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build
+        run: dotnet build WindowFloatIA.slnx -c Release
+      - name: Smoke tests
+        run: dotnet run --project tests/WindowFloatIA.Smoke -c Release --no-build
+      - name: Package Windows x64
+        shell: pwsh
+        run: ./scripts/publish.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WfloatIA-win-x64
+          path: |
+            artifacts/WfloatIA-win-x64.zip
+            artifacts/WfloatIA-win-x64.zip.sha256
+          if-no-files-found: error
