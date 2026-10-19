@@ -48,4 +48,23 @@ Não há polling, timers, animações ou tarefas de rede. O atalho é recebido p
 
 Validação manual: abrir/esconder com outro aplicativo em foco, testar Esc e fechar, alternar Topmost, testar início com `--background`, tentar abrir uma segunda instância e encerrar pela bandeja. Medir CPU e memória após aquecimento, em repouso e depois de vários ciclos de abertura.
 
-Integração com IA, histórico, comando de voz e inicialização automática ainda não estão implementados.
+## Chat flutuante — primeira versão
+
+- Interface grafite sem barra de título, com cantos arredondados e sombra.
+- Estado compacto e histórico expansível. O envio abre a conversa; o botão no topo recolhe sem apagar.
+- Enter envia; Shift + Enter insere uma nova linha. O campo cresce até 120 pixels e depois permite rolagem.
+- Botão + e arrastar/soltar selecionam até 10 arquivos locais únicos; diretórios são ignorados. Os cartões permitem remover anexos. Nenhum conteúdo de arquivo é lido ou enviado.
+- Respostas são simuladas e identificadas como demonstração. O histórico mantém as últimas 100 mensagens em memória e é descartado ao encerrar.
+- Arraste a faixa superior para mover; a borda direita ajusta a largura; o separador abaixo da conversa ajusta sua altura.
+- Posição, largura, altura da conversa e opção Fixar são salvas em `%LOCALAPPDATA%/WindowFloatIA/window.json` ao esconder ou encerrar. Preferências ausentes ou inválidas usam os valores padrão.
+- A janela ajusta sua posição à área útil do monitor ao abrir e em alterações de tela/DPI.
+
+## Verificação automatizada
+
+```powershell
+dotnet run --project tests/WindowFloatIA.Smoke -c Release
+```
+
+Executa verificações dos componentes WPF (envio, expansão, recolhimento, anexos e limite de histórico) e gera imagens fora da tela em `artifacts/previews/`. Os testes não substituem a validação manual de atalhos globais, bandeja e diferentes monitores/DPI.
+
+Integração com IA, histórico persistente, comando de voz e inicialização automática ainda não estão implementados.

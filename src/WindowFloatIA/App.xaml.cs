@@ -26,7 +26,11 @@ public partial class App : Application
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Mostrar / esconder", null, (_, _) => ToggleWindow());
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("Sair", null, (_, _) => Shutdown());
+        menu.Items.Add("Sair", null, (_, _) =>
+        {
+            ((MainWindow)MainWindow).IsExiting = true;
+            Shutdown();
+        });
         _tray = new Forms.NotifyIcon
         {
             Icon = System.Drawing.SystemIcons.Application,
