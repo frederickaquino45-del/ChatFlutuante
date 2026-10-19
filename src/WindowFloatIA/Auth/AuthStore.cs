@@ -18,6 +18,7 @@ public sealed class AccountRegistration
     public string Scope { get; set; } = "";
     public DateTimeOffset ExpiresAt { get; set; }
     public string Label => Email + " · " + ClientId[^Math.Min(8, ClientId.Length)..];
+    public override string ToString() => Label;
     public void ClearTokens() { AccessToken = RefreshToken = IdToken = Scope = ""; ExpiresAt = default; }
 }
 public sealed class AuthState

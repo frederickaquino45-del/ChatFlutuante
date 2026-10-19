@@ -69,7 +69,7 @@ Executa verificações dos componentes WPF e do adaptador HTTP com dados simulad
 
 ## Conectar o primeiro agente GPT
 
-1. Execute o aplicativo e clique em **Conta**.
+1. Execute o aplicativo e clique na **engrenagem > Gerenciar contas e modelos do ChatGPT**.
 2. Clique em **Continue with ChatGPT** e conclua o login e o consentimento no navegador do sistema.
 3. Após carregar os modelos, a configuração fecha automaticamente. Escolha o modelo no seletor da própria conversa.
 4. Digite a pergunta e pressione Enter.
@@ -107,3 +107,9 @@ A mesma suíte testa PKCE com vetor RFC, callback HTTP local, state incorreto, c
 - O primeiro agente somente responde por texto: não tem ferramentas, acesso ao computador, uploads, pesquisa na web ou ações externas.
 
 Histórico persistente, anexos para IA, ferramentas, comando de voz e inicialização automática ficam para próximas etapas.
+
+## Aparencia e configuracoes
+
+A engrenagem centraliza contas e o agente ChatGPT, a opcao de manter a janela acima dos outros aplicativos e a aparencia. Os temas Claro/Escuro e destaques Violeta/Azul/Verde sao aplicados imediatamente e persistidos nas preferencias. Outros provedores de agentes ainda nao foram implementados.
+
+Os botoes do chat usam icones Fluent com descricoes ao passar o mouse e nomes acessiveis. O seletor de modelos acompanha o tema escolhido.

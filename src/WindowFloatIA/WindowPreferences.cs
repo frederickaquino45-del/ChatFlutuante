@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace WindowFloatIA;
 
 public record WindowPreferences(double? Left = null, double? Top = null, double Width = 620, double HistoryHeight = 300, bool Topmost = true,
-    double CompactHeight = 240, double ExpandedWidth = 620, double ExpandedHeight = 560, string LastModel = "")
+    double CompactHeight = 240, double ExpandedWidth = 620, double ExpandedHeight = 560, string LastModel = "", string Theme = "Escuro", string Accent = "Violeta")
 {
     private static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WindowFloatIA", "window.json");
     public static WindowPreferences Load()

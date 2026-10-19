@@ -31,9 +31,11 @@ public sealed class AgentSettingsWindow : Window
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = new SolidColorBrush(Color.FromRgb(38, 38, 38));
-        Foreground = Brushes.White;
-        var panel = new StackPanel { Margin = new Thickness(24), Background = Background };
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/WindowFloatIA;component/Controls.xaml", UriKind.Relative) });
+        Appearance.Apply(this, "Escuro", "Violeta");
+        SetResourceReference(BackgroundProperty, "ShellBrush");
+        _status.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        var panel = new StackPanel { Margin = new Thickness(24) };
         panel.Children.Add(new TextBlock { Text = "Sua conta ChatGPT", FontSize = 20, Margin = new Thickness(0, 0, 0, 16) });
         panel.Children.Add(new TextBlock { Text = "Contas registradas neste computador", Margin = new Thickness(0, 0, 0, 6) });
         panel.Children.Add(_accounts);
@@ -73,7 +75,7 @@ public sealed class AgentSettingsWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = "O login abre no navegador. Autorize o uso do seu plano ChatGPT para enviar perguntas. A sessão é protegida pelo Windows neste computador; sua senha não passa pelo aplicativo.",
-            TextWrapping = TextWrapping.Wrap, Foreground = Brushes.LightGray, Margin = new Thickness(0, 16, 0, 0)
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 16, 0, 0)
         });
         panel.Children.Add(_status);
         var cancel = new Button { Content = "Cancelar operação", Margin = new Thickness(0, 12, 0, 0), Padding = new Thickness(8) };
@@ -101,7 +103,7 @@ public sealed class AgentSettingsWindow : Window
     }
     private void AddButton(string title, Func<CancellationToken, Task> action)
     {
-        var button = new Button { Content = title, Padding = new Thickness(8), Margin = new Thickness(0, 8, 0, 0) };
+        var button = new Button { Content = title, ToolTip = title, Padding = new Thickness(8), Margin = new Thickness(0, 8, 0, 0) };
         button.Click += async (_, _) => await RunAsync(action);
         _actions.Children.Add(button);
     }

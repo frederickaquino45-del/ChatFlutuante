@@ -4,11 +4,13 @@
  Title="WindowFloatIA" Width="620" Height="240" MinWidth="420" MinHeight="230"
  WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="NoResize"
  Topmost="True" ShowInTaskbar="False" WindowStartupLocation="CenterScreen"
- Foreground="#EEEEEE" FontFamily="Segoe UI" FontSize="13"
+ Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI" FontSize="13"
  PreviewKeyDown="OnPreviewKeyDown" Closing="OnClosing">
  <Window.Resources>
+ <ResourceDictionary>
+ <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="Controls.xaml"/></ResourceDictionary.MergedDictionaries>
   <Style TargetType="Button">
-   <Setter Property="Foreground" Value="#EEEEEE"/><Setter Property="Background" Value="Transparent"/>
+   <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Background" Value="Transparent"/>
    <Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="8,4"/>
    <Setter Property="Cursor" Value="Hand"/><Setter Property="MinHeight" Value="28"/>
    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
@@ -16,8 +18,8 @@
      <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
     </Border>
     <ControlTemplate.Triggers>
-     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#484848"/></Trigger>
-     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="Background" Value="#484848"/></Trigger>
+     <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger>
+     <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger>
      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
@@ -27,69 +29,70 @@
    <EventSetter Event="DragDelta" Handler="OnResize"/>
    <EventSetter Event="DragCompleted" Handler="OnResizeCompleted"/>
   </Style>
+ </ResourceDictionary>
  </Window.Resources>
  <Grid>
- <Border x:Name="Shell" Margin="12" Background="#262626" BorderBrush="#393939" BorderThickness="1" CornerRadius="24" Padding="16,8,16,12">
+ <Border x:Name="Shell" Margin="12" Background="{DynamicResource ShellBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="24" Padding="16,8,16,12">
   <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="3" Opacity="0.4"/></Border.Effect>
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="42"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="32"/></Grid.RowDefinitions>
    <Grid Background="Transparent" MouseLeftButtonDown="OnDragWindow">
     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <TextBlock Text="{Binding Selected.Status}" TextTrimming="CharacterEllipsis" Foreground="#CFCFCF" FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
-    <Button Grid.Column="1" x:Name="SettingsButton" Content="Conta" ToolTip="Gerenciar conexão ChatGPT" Click="OnSettings"/>
-    <Button Grid.Column="2" x:Name="HistoryButton" Content="⌃" ToolTip="Expandir ou recolher conversa" AutomationProperties.Name="Alternar conversa" Click="OnToggleHistory"/>
-    <Button Grid.Column="3" Content="×" FontSize="20" ToolTip="Esconder (Esc)" AutomationProperties.Name="Esconder janela" Click="OnHideClick"/>
+    <TextBlock Text="{Binding Selected.Status}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource MutedBrush}" FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
+    <Button Grid.Column="1" x:Name="SettingsButton" Content="&#xE713;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" ToolTip="Configurações: contas, agentes e aparência" AutomationProperties.Name="Configurações" Click="OnSettings"/>
+    <Button Grid.Column="2" x:Name="HistoryButton" Content="&#xE70E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" ToolTip="Expandir ou recolher conversa" AutomationProperties.Name="Alternar conversa" Click="OnToggleHistory"/>
+    <Button Grid.Column="3" Content="&#xE8BB;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" ToolTip="Esconder (Esc)" AutomationProperties.Name="Esconder janela" Click="OnHideClick"/>
    </Grid>
    <Grid Grid.Row="1">
     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
     <ListBox x:Name="TabList" ItemsSource="{Binding Tabs}" SelectionChanged="OnTabSelection"
-     Background="Transparent" BorderThickness="0" Foreground="#EEEEEE" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+     Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextBrush}" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
      <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
      <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem">
       <Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,4,0"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
-       <Border x:Name="TabSurface" CornerRadius="8" Padding="6,1" Background="#303030"><ContentPresenter/></Border>
-       <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="#4A405E"/></Trigger></ControlTemplate.Triggers>
+       <Border x:Name="TabSurface" CornerRadius="8" Padding="6,1" Background="{DynamicResource SurfaceBrush}"><ContentPresenter/></Border>
+       <ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="{DynamicResource SelectedBrush}"/></Trigger></ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
      </Style></ListBox.ItemContainerStyle>
      <ListBox.ItemTemplate><DataTemplate>
       <StackPanel Orientation="Horizontal">
-       <TextBlock Text="{Binding Indicator}" Foreground="#B9ABFF" VerticalAlignment="Center" Margin="0,0,4,0"/>
-       <TextBlock Text="{Binding Title}" Foreground="#EEEEEE" MaxWidth="145" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Title}"/>
-       <Button Content="×" Tag="{Binding}" Click="OnCloseTab" ToolTip="Fechar conversa" AutomationProperties.Name="Fechar conversa" Padding="6,0"/>
+       <TextBlock Text="{Binding Indicator}" Foreground="{DynamicResource AccentTextBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+       <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" MaxWidth="145" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Title}"/>
+       <Button Content="&#xE8BB;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Tag="{Binding}" Click="OnCloseTab" ToolTip="Fechar conversa" AutomationProperties.Name="Fechar conversa" Padding="6,0"/>
       </StackPanel>
      </DataTemplate></ListBox.ItemTemplate>
     </ListBox>
-    <Button Grid.Column="1" x:Name="NewChatButton" Content="+ Novo" ToolTip="Abrir nova conversa" Click="OnNewChat"/>
+    <Button Grid.Column="1" x:Name="NewChatButton" Content="&#xE710;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" AutomationProperties.Name="Nova conversa" Width="36" ToolTip="Abrir nova conversa" Click="OnNewChat"/>
    </Grid>
    <Grid x:Name="HistoryPanel" Grid.Row="2" Visibility="Collapsed" Margin="0,6,0,8">
     <ScrollViewer x:Name="HistoryScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
      ScrollChanged="OnHistoryScrollChanged" PreviewMouseWheel="OnHistoryWheel">
      <ItemsControl x:Name="MessageList" ItemsSource="{Binding Selected.Messages}">
       <ItemsControl.ItemTemplate><DataTemplate>
-       <Border Background="{Binding Background}" CornerRadius="12" Padding="12" Margin="0,0,5,10">
-        <StackPanel><TextBlock Text="{Binding Author}" Foreground="#B9ABFF" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
+       <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="12" Padding="12" Margin="0,0,5,10">
+        <StackPanel><TextBlock Text="{Binding Author}" Foreground="{DynamicResource AccentTextBrush}" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
          <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,6,0,0"/>
         </StackPanel>
        </Border>
       </DataTemplate></ItemsControl.ItemTemplate>
      </ItemsControl>
     </ScrollViewer>
-    <Button x:Name="JumpButton" Content="↓ Ir para o final" Background="#51456A" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,20,8" Click="OnJumpToEnd"/>
+    <Button x:Name="JumpButton" Content="↓ Ir para o final" ToolTip="Retomar acompanhamento da resposta" Background="{DynamicResource SelectedBrush}" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,20,8" Click="OnJumpToEnd"/>
    </Grid>
    <Grid Grid.Row="3" Margin="0,6,0,8" MinHeight="36" MaxHeight="120">
-    <TextBox x:Name="Composer" Background="Transparent" Foreground="#EEEEEE" CaretBrush="White"
+    <TextBox x:Name="Composer" Background="Transparent" Foreground="{DynamicResource TextBrush}" CaretBrush="{DynamicResource TextBrush}"
      BorderThickness="0" Padding="0" MinHeight="36" MaxHeight="120" AcceptsReturn="True"
      TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="OnTextChanged" AutomationProperties.Name="Mensagem"/>
-    <TextBlock x:Name="Placeholder" Text="Pergunte ao GPT…" Foreground="#BDBDBD" IsHitTestVisible="False" Margin="2,2,0,0"/>
+    <TextBlock x:Name="Placeholder" Text="Pergunte ao GPT…" Foreground="{DynamicResource MutedBrush}" IsHitTestVisible="False" Margin="2,2,0,0"/>
    </Grid>
    <Grid Grid.Row="4">
     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <TextBlock Text="✦" Foreground="#AAA0FF" FontSize="23" VerticalAlignment="Center" Margin="0,0,10,0"/>
+    <TextBlock Text="&#xE99A;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" ToolTip="Agente ChatGPT" Foreground="{DynamicResource AccentTextBrush}" FontSize="19" VerticalAlignment="Center" Margin="0,0,10,0"/>
     <ComboBox x:Name="ModelPicker" Grid.Column="1" MaxWidth="260" MinWidth="100" HorizontalAlignment="Left" VerticalAlignment="Center"
      DisplayMemberPath="DisplayName" SelectedValuePath="Slug" SelectionChanged="OnModelSelection" ToolTip="Modelo desta conversa" AutomationProperties.Name="Modelo GPT"/>
-    <CheckBox Grid.Column="2" Content="Fixar" IsChecked="{Binding Topmost, RelativeSource={RelativeSource AncestorType=Window}}" Foreground="#AAAAAA" VerticalAlignment="Center" Margin="12,0"/>
-    <Button Grid.Column="3" x:Name="SendButton" Content="↑" FontSize="20" Background="#6257A6" Width="34" IsEnabled="False" ToolTip="Enviar (Enter)" AutomationProperties.Name="Enviar mensagem" Click="OnSend"/>
+
+    <Button Grid.Column="3" x:Name="SendButton" Content="&#xE724;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="17" Background="{DynamicResource AccentBrush}" Width="34" IsEnabled="False" ToolTip="Enviar (Enter)" AutomationProperties.Name="Enviar mensagem" Click="OnSend"/>
    </Grid>
   </Grid>
  </Border>

@@ -124,6 +124,19 @@ internal static class Program
 
         Render(window, "account-return");
         Render(new AgentSettingsWindow(new WindowFloatIA.Auth.ChatGptAuth(new System.Net.Http.HttpClient(), new MemoryAuthStore()), ""), "agent-settings");
+        Appearance.Apply(window, "Claro", "Azul");
+        Render(window, "light-theme");
+        bool? savedPin = null; string? savedTheme = null; string? savedAccent = null;
+        var preferences = new PreferencesWindow(true, "Escuro", "Violeta", () => { }, (pin, theme, accent) => { savedPin = pin; savedTheme = theme; savedAccent = accent; });
+        Render(preferences, "preferences");
+        var preferencePanel = (StackPanel)((ScrollViewer)preferences.Content).Content;
+        foreach (var child in preferencePanel.Children)
+        {
+            if (child is CheckBox pinControl) pinControl.IsChecked = false;
+            if (child is ComboBox choice) choice.SelectedIndex = 1;
+        }
+        Assert(savedPin == false && savedTheme == "Claro" && savedAccent == "Azul", "Preferences apply pin, theme and accent immediately");
+        Render(preferences, "preferences-light");
         LoginWindowChecks.Run();
         System.Threading.Tasks.Task.Run(AgentChecks.RunAsync).GetAwaiter().GetResult();
         System.Threading.Tasks.Task.Run(AuthChecks.RunAsync).GetAwaiter().GetResult();

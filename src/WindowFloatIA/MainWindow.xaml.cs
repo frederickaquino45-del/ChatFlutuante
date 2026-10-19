@@ -32,18 +32,21 @@ public partial class MainWindow : Window
     private int _scrollVersion;
     private double _compactWidth, _compactHeight, _expandedWidth, _expandedHeight;
     private string _lastModel;
+    private string _theme, _accent;
     private readonly CancellationTokenSource _lifetime = new();
 
     public MainWindow() : this(WindowPreferences.Load()) { }
     public MainWindow(WindowPreferences settings, IChatAgent? agent = null)
     {
         _testAgent = agent;
+        _theme = settings.Theme; _accent = settings.Accent;
         _lastModel = settings.LastModel;
         _compactWidth = settings.Width;
         _compactHeight = settings.CompactHeight;
         _expandedWidth = settings.ExpandedWidth;
         _expandedHeight = settings.ExpandedHeight;
         InitializeComponent();
+        Appearance.Apply(this, _theme, _accent);
         DataContext = Workspace;
         Width = _compactWidth;
         Height = _compactHeight;
@@ -155,7 +158,7 @@ public partial class MainWindow : Window
         var tab = Workspace.Selected;
         Placeholder.Visibility = Composer.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         SendButton.IsEnabled = !_restoringConnection && (tab.IsBusy || !string.IsNullOrWhiteSpace(tab.Draft));
-        SendButton.Content = tab.IsBusy ? "■" : "↑";
+        SendButton.Content = tab.IsBusy ? "\uE71A" : "\uE724";
         SendButton.ToolTip = tab.IsBusy ? "Parar resposta desta aba" : "Enviar (Enter)";
         System.Windows.Automation.AutomationProperties.SetName(SendButton, tab.IsBusy ? "Parar resposta" : "Enviar mensagem");
         SettingsButton.IsEnabled = !Workspace.AnyBusy && !_restoringConnection;
@@ -174,7 +177,7 @@ public partial class MainWindow : Window
         if (tab.IsBusy || string.IsNullOrWhiteSpace(tab.Draft)) return;
         if (_testAgent is null && _auth?.IsSignedIn != true)
         {
-            OnSettings(this, new RoutedEventArgs());
+            OnAccountSettings();
             if (_auth?.IsSignedIn != true) return;
             tab = Workspace.Selected;
         }
@@ -233,13 +236,27 @@ public partial class MainWindow : Window
     }
     private void OnSettings(object sender, RoutedEventArgs e)
     {
+        PreferencesWindow? settings = null;
+        settings = new PreferencesWindow(Topmost, _theme, _accent, () =>
+        {
+            OnAccountSettings(settings);
+        }, (pin, theme, accent) =>
+        {
+            Topmost = pin; _theme = theme; _accent = accent;
+            Appearance.Apply(this, theme, accent); SavePreferences();
+        }) { Owner = this };
+        settings.ShowDialog();
+    }
+    private void OnAccountSettings(Window? owner = null)
+    {
         if (Workspace.AnyBusy || _restoringConnection) return;
         try
         {
             _auth ??= new ChatGptAuth(Http, new AuthStore());
             var previous = _auth.Selected?.ClientId;
             var wasSignedIn = _auth.IsSignedIn;
-            var settings = new AgentSettingsWindow(_auth, Workspace.Selected.Model) { Owner = this };
+            var settings = new AgentSettingsWindow(_auth, Workspace.Selected.Model) { Owner = owner ?? this };
+            Appearance.Apply(settings, _theme, _accent);
             var accepted = settings.ShowDialog() == true;
             ApplyAccountResult(previous, wasSignedIn, _auth.Selected?.ClientId, _auth.IsSignedIn,
                 settings.ModelsLoaded, settings.Models, accepted ? settings.Model : null);
@@ -336,7 +353,7 @@ public partial class MainWindow : Window
         }
         HistoryPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
         Composer.MaxHeight = expanded ? 120 : Math.Clamp(Height - 194, 36, 120);
-        HistoryButton.Content = expanded ? "⌄" : "⌃";
+        HistoryButton.Content = expanded ? "\uE70D" : "\uE70E";
         if (_ready) FitToScreen();
     }
     private void RememberSize()
@@ -399,6 +416,6 @@ public partial class MainWindow : Window
         if (_testAgent is not null) return;
         RememberSize();
         WindowPreferences.Save(new WindowPreferences(double.IsFinite(Left) ? Left : null, double.IsFinite(Top) ? Top : null,
-            _compactWidth, 300, Topmost, _compactHeight, _expandedWidth, _expandedHeight, _lastModel));
+            _compactWidth, 300, Topmost, _compactHeight, _expandedWidth, _expandedHeight, _lastModel, _theme, _accent));
     }
 }

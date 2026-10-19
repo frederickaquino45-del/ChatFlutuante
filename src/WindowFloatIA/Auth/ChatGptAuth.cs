@@ -15,7 +15,10 @@ using WindowFloatIA.Agents;
 
 namespace WindowFloatIA.Auth;
 
-public record ModelChoice(string Slug, string DisplayName);
+public record ModelChoice(string Slug, string DisplayName)
+{
+    public override string ToString() => DisplayName;
+}
 
 public interface IChatGptAuth
 {
