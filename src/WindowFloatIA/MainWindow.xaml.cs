@@ -70,7 +70,7 @@ public partial class MainWindow : Window
         Width = _compactWidth;
         Height = _compactHeight;
         Topmost = settings.Topmost;
-        Workspace.Selected.Model = _lastModel;
+        Workspace.Selected.Model = "";
         Workspace.Selected.Status = "Entre com ChatGPT para começar";
         if (agent is null)
         {
@@ -94,6 +94,8 @@ public partial class MainWindow : Window
             try { _history.Restore("connection:" + CurrentConnectionId, Workspace, connectionId: CurrentConnectionId); }
             catch { Workspace.Selected.Status = "Não foi possível restaurar esta conexão."; }
         }
+        Workspace.Selected.Model = "";
+        Workspace.Selected.RequiresModelSelection = false;
         _loadedHistories.Add(CurrentConnectionId);
         Workspace.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ChatWorkspace.Selected)) DisplaySelected(); };
         Workspace.ContentChanged += tab =>
@@ -197,7 +199,7 @@ public partial class MainWindow : Window
         _displayed.ProviderName = _displayed.ConnectionId == "chatgpt" ? "GPT" : SelectedConnection?.Name ?? "IA";
         _models = _catalogues.GetValueOrDefault(_displayed.ConnectionId) ?? Array.Empty<ModelChoice>();
         ModelPicker.ItemsSource = _models;
-        if (_displayed.Model.Length == 0 && !_displayed.RequiresModelSelection) _displayed.Model = _models.FirstOrDefault()?.Slug ?? "";
+        if (_displayed.Model.Length == 0 && !_displayed.RequiresModelSelection) _displayed.Model = QuickModel.Select(_models);
         Composer.Text = _displayed.Draft;
         TabList.SelectedItem = _displayed;
         ModelPicker.SelectedValue = _displayed.Model;
@@ -235,7 +237,7 @@ public partial class MainWindow : Window
     {
         if (!_syncing && TabList.SelectedItem is ChatTab tab && tab != Workspace.Selected) Workspace.Select(tab);
     }
-    private void OnNewChat(object sender, RoutedEventArgs e) => Workspace.Add(Workspace.Selected.Model);
+    private void OnNewChat(object sender, RoutedEventArgs e) => Workspace.Add(QuickModel.Select(_models));
     private void OnCloseTab(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
@@ -306,7 +308,7 @@ public partial class MainWindow : Window
     {
         if (modifiers != ModifierKeys.Control || key is not (Key.T or Key.W)) return false;
         if (repeat || _restoringConnection) return true;
-        if (key == Key.T) Workspace.Add(Workspace.Selected.Model);
+        if (key == Key.T) Workspace.Add(QuickModel.Select(_models));
         else { SaveHistory(); Workspace.Close(Workspace.Selected); }
         FocusComposer();
         return true;
@@ -320,7 +322,7 @@ public partial class MainWindow : Window
         ModelPicker.ItemsSource = models;
         foreach (var tab in Workspace.Tabs.Where(t => t.ConnectionId == CurrentConnectionId))
         {
-            if (tab.Model.Length == 0 && !tab.RequiresModelSelection) tab.Model = models.FirstOrDefault(m => m.Slug == _lastModel)?.Slug ?? models.FirstOrDefault()?.Slug ?? "";
+            if (tab.Model.Length == 0 && !tab.RequiresModelSelection) tab.Model = QuickModel.Select(models);
             else if (!models.Any(m => m.Slug == tab.Model)) { tab.RequiresModelSelection = true; tab.Model = ""; tab.Status = "Modelo indisponível. Escolha outro modelo."; }
         }
         ModelPicker.SelectedValue = Workspace.Selected.Model;
