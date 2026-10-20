@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('win-x64', 'win-arm64')]
     [string]$Runtime = 'win-x64'
 )
@@ -21,7 +21,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'A compilacao falhou. Confira os erros acima.' }
     $exe = Join-Path $output 'WindowFloatIA.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Executavel nao encontrado na saida.' }
-    foreach ($document in @('README.md','CONEXOES.md','LICENSE')) {
+    foreach ($document in @('README.md','CONEXOES.md','LICENSE','ATUALIZACAO.md','SECURITY.md')) {
         $source = Join-Path $PSScriptRoot $document
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $output }
     }
