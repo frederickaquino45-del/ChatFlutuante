@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -296,9 +296,20 @@ public partial class MainWindow : Window
     }
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (TryHandleTabShortcut(e.Key, Keyboard.Modifiers, e.IsRepeat)) { e.Handled = true; return; }
         if (e.Key == Key.Escape) { Hide(); e.Handled = true; }
         else if (e.Key == Key.Enter && Composer.IsKeyboardFocusWithin && Keyboard.Modifiers == ModifierKeys.None)
         { SendSelected(); e.Handled = true; }
+    }
+
+    internal bool TryHandleTabShortcut(Key key, ModifierKeys modifiers, bool repeat = false)
+    {
+        if (modifiers != ModifierKeys.Control || key is not (Key.T or Key.W)) return false;
+        if (repeat || _restoringConnection) return true;
+        if (key == Key.T) Workspace.Add(Workspace.Selected.Model);
+        else { SaveHistory(); Workspace.Close(Workspace.Selected); }
+        FocusComposer();
+        return true;
     }
 
     internal void SetModels(IReadOnlyList<ModelChoice> models)

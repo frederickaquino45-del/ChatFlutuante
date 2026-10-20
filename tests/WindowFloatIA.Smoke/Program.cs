@@ -15,6 +15,25 @@ internal static class Program
     {
         // In-process component checks and off-screen rendering; no desktop input automation.
         var window = new MainWindow(new WindowPreferences(), new TestAgent());
+        var shortcuts = new MainWindow(new WindowPreferences(), new TestAgent());
+        var original = shortcuts.Workspace.Selected;
+        original.Draft = "preservar rascunho";
+        original.ConnectionId = "test-connection";
+        original.Model = "test-model";
+        Assert(shortcuts.TryHandleTabShortcut(System.Windows.Input.Key.T, System.Windows.Input.ModifierKeys.Control), "Ctrl+T handled");
+        Assert(shortcuts.Workspace.Tabs.Count == 2 && original.Draft == "preservar rascunho" && shortcuts.Workspace.Selected.ConnectionId == "test-connection", "New shortcut tab preserves draft and connection");
+        shortcuts.TryHandleTabShortcut(System.Windows.Input.Key.T, System.Windows.Input.ModifierKeys.Control, true);
+        Assert(shortcuts.Workspace.Tabs.Count == 2, "Key repeat does not create extra tabs");
+        var closing = shortcuts.Workspace.Selected;
+        using (var cancellation = new System.Threading.CancellationTokenSource())
+        {
+            closing.Request = cancellation;
+            shortcuts.TryHandleTabShortcut(System.Windows.Input.Key.W, System.Windows.Input.ModifierKeys.Control);
+            Assert(cancellation.IsCancellationRequested && shortcuts.Workspace.Selected == original, "Ctrl+W cancels only closed tab and selects remaining tab");
+        }
+        shortcuts.TryHandleTabShortcut(System.Windows.Input.Key.W, System.Windows.Input.ModifierKeys.Control);
+        Assert(shortcuts.Workspace.Tabs.Count == 1 && shortcuts.Workspace.Selected != original, "Closing last tab creates fresh tab");
+        Assert(!shortcuts.TryHandleTabShortcut(System.Windows.Input.Key.W, System.Windows.Input.ModifierKeys.None), "Typing W does not close tab");
         var composer = (TextBox)window.FindName("Composer");
         var send = (Button)window.FindName("SendButton");
         var history = (Grid)window.FindName("HistoryPanel");

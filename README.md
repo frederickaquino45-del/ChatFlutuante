@@ -124,3 +124,11 @@ Os testes de provedores usam respostas simuladas, sem gerar cobranças de infer�
 Contribuições são feitas por **pull request** para `master`. Veja [CONTRIBUTING.md](CONTRIBUTING.md). Use issues para relatar problemas, removendo dados pessoais e credenciais das capturas.
 
 Distribuído sob a [licença MIT](LICENSE). O projeto é independente e não é afiliado aos provedores de IA integrados.
+
+## Atalhos de abas e atualização
+
+- **Ctrl+T:** abre uma nova conversa na conexão atual.
+- **Ctrl+W:** fecha a conversa selecionada e cancela a resposta dela, se estiver em andamento. Ao fechar a última, uma nova aba vazia é criada.
+- Os atalhos de abas funcionam quando o chat está em foco. O atalho global de mostrar/esconder continua configurável nas preferências.
+
+O aplicativo portátil pode ser atualizado sem desinstalar: encerre pelo menu da bandeja e substitua o pacote completo no mesmo caminho, preservando `%LOCALAPPDATA%/WindowFloatIA`. Consulte [ATUALIZACAO.md](ATUALIZACAO.md) para backup e recuperação e [SECURITY.md](SECURITY.md) para a revisão de segurança e seus limites.

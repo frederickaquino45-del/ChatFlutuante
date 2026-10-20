@@ -1,4 +1,4 @@
-<Window x:Class="WindowFloatIA.MainWindow"
+﻿<Window x:Class="WindowFloatIA.MainWindow"
  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
  xmlns:local="clr-namespace:WindowFloatIA"
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -60,7 +60,7 @@
       <StackPanel Orientation="Horizontal">
        <TextBlock Text="{Binding Indicator}" Foreground="{DynamicResource AccentTextBrush}" VerticalAlignment="Center" Margin="0,0,4,0"/>
        <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextBrush}" MaxWidth="145" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Title}"/>
-       <Button Content="&#xE8BB;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Tag="{Binding}" Click="OnCloseTab" ToolTip="Fechar conversa" AutomationProperties.Name="Fechar conversa" Padding="6,0"/>
+       <Button Content="&#xE8BB;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10" Tag="{Binding}" Click="OnCloseTab" ToolTip="Fechar conversa (Ctrl+W)" AutomationProperties.Name="Fechar conversa" Padding="6,0"/>
       </StackPanel>
      </DataTemplate></ListBox.ItemTemplate>
     </ListBox>
