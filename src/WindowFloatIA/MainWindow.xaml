@@ -72,8 +72,14 @@
      <ItemsControl x:Name="MessageList" ItemsSource="{Binding Selected.Messages}">
       <ItemsControl.ItemTemplate><DataTemplate>
        <Border Background="{DynamicResource SurfaceBrush}" CornerRadius="12" Padding="12" Margin="0,0,5,10">
-        <StackPanel><TextBlock Text="{Binding Author}" Foreground="{DynamicResource AccentTextBrush}" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap"/>
-         <local:MarkdownTextBlock SourceText="{Binding Text}" RenderMarkdown="{Binding IsAssistant}" TextWrapping="Wrap" LineHeight="21" Margin="0,8,0,0"/>
+        <StackPanel>
+         <DockPanel>
+          <Button DockPanel.Dock="Right" Content="&#xE8C8;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="14" Tag="{Binding}" Click="OnCopyResponse" ToolTip="Copiar resposta completa" AutomationProperties.Name="Copiar resposta completa" Padding="6,2">
+           <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding IsAssistant}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Button.Style>
+          </Button>
+          <TextBlock Text="{Binding Author}" Foreground="{DynamicResource AccentTextBrush}" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"/>
+         </DockPanel>
+         <local:MarkdownTextBlock SourceText="{Binding Text}" RenderMarkdown="{Binding IsAssistant}" Margin="0,8,0,0"/>
         </StackPanel>
        </Border>
       </DataTemplate></ItemsControl.ItemTemplate>

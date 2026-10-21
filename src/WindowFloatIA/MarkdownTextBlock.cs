@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,8 +8,34 @@ using System.Windows.Media;
 namespace WindowFloatIA;
 
 // A native, text-only Markdown view: no browser, HTML execution or remote images.
-public sealed class MarkdownTextBlock : TextBlock
+public sealed class MarkdownTextBlock : RichTextBox
 {
+    private readonly Paragraph _paragraph = new() { Margin = new Thickness(0), LineHeight = 21 };
+    public InlineCollection Inlines => _paragraph.Inlines;
+    public TextPointer ContentStart => _paragraph.ContentStart;
+    public TextPointer ContentEnd => _paragraph.ContentEnd;
+    public MarkdownTextBlock()
+    {
+        IsReadOnly = true; IsDocumentEnabled = true; IsUndoEnabled = false;
+        IsReadOnlyCaretVisible = true; IsInactiveSelectionHighlightEnabled = true;
+        BorderThickness = new Thickness(0); Padding = new Thickness(0);
+        Background = Brushes.Transparent;
+        VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        Document = new FlowDocument(_paragraph) { PagePadding = new Thickness(0) };
+        SetResourceReference(ForegroundProperty, "TextBrush");
+        var menu = new ContextMenu();
+        menu.Items.Add(new MenuItem { Header = "Copiar seleção", Command = System.Windows.Input.ApplicationCommands.Copy, CommandTarget = this });
+        menu.Items.Add(new MenuItem { Header = "Selecionar tudo", Command = System.Windows.Input.ApplicationCommands.SelectAll, CommandTarget = this });
+        ContextMenu = menu;
+        System.Windows.Input.CommandManager.AddPreviewExecutedHandler(this, (_, e) =>
+        {
+            if (e.Command != System.Windows.Input.ApplicationCommands.Copy) return;
+            e.Handled = true;
+            if (!Selection.IsEmpty) ToolTip = ClipboardCopy.TrySet(Selection.Text) ? "Trecho copiado" : "Não foi possível copiar. Tente novamente.";
+        });
+    }
+
     public static readonly DependencyProperty SourceTextProperty = DependencyProperty.Register(nameof(SourceText), typeof(string), typeof(MarkdownTextBlock), new PropertyMetadata("", RenderChanged));
     public static readonly DependencyProperty RenderMarkdownProperty = DependencyProperty.Register(nameof(RenderMarkdown), typeof(bool), typeof(MarkdownTextBlock), new PropertyMetadata(true, RenderChanged));
     public string SourceText { get => (string)GetValue(SourceTextProperty); set => SetValue(SourceTextProperty, value); }
@@ -20,6 +46,18 @@ public sealed class MarkdownTextBlock : TextBlock
     private static void RenderChanged(DependencyObject target, DependencyPropertyChangedEventArgs args) => ((MarkdownTextBlock)target).Render();
 
     private void Render()
+    {
+        var start = Document.ContentStart.GetOffsetToPosition(Selection.Start);
+        var end = Document.ContentStart.GetOffsetToPosition(Selection.End);
+        var selected = !Selection.IsEmpty;
+        RenderCore();
+        if (selected)
+        {
+            var length = Document.ContentStart.GetOffsetToPosition(Document.ContentEnd);
+            Selection.Select(Document.ContentStart.GetPositionAtOffset(Math.Min(start, length))!, Document.ContentStart.GetPositionAtOffset(Math.Min(end, length))!);
+        }
+    }
+    private void RenderCore()
     {
         Inlines.Clear();
         var source = SourceText ?? "";

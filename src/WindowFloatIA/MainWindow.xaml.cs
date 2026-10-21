@@ -237,6 +237,41 @@ public partial class MainWindow : Window
     {
         if (!_syncing && TabList.SelectedItem is ChatTab tab && tab != Workspace.Selected) Workspace.Select(tab);
     }
+    private readonly Dictionary<Button, DispatcherTimer> _copyFeedbackTimers = new();
+
+    private void OnCopyResponse(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not Button { Tag: ChatMessage message } button || !message.IsAssistant) return;
+        if (_copyFeedbackTimers.Remove(button, out var previousTimer)) previousTimer.Stop();
+        button.Content = "\uE8C8";
+        var copied = ClipboardCopy.TrySet(message.Text);
+        button.ToolTip = copied ? "Resposta copiada!" : "Não foi possível copiar. Tente novamente.";
+        Workspace.Selected.Status = copied ? "Resposta copiada" : "Área de transferência indisponível. Tente novamente.";
+        System.Windows.Automation.AutomationProperties.SetName(button, copied ? "Resposta copiada" : "Copiar resposta completa");
+        if (!copied) return;
+        // Draw the confirmation explicitly so it remains a circled check with either icon font.
+        var confirmation = new System.Windows.Shapes.Path
+        {
+            Width = 16, Height = 16, StrokeThickness = 1.5,
+            StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
+            StrokeEndLineCap = System.Windows.Media.PenLineCap.Round,
+            Data = System.Windows.Media.Geometry.Parse("M8,1 A7,7 0 1 1 8,15 A7,7 0 1 1 8,1 M4.5,8 L7,10.5 L11.5,5.5")
+        };
+        confirmation.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "AccentTextBrush");
+        button.Content = confirmation;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _copyFeedbackTimers.Remove(button);
+            button.Content = "\uE8C8";
+            button.ToolTip = "Copiar resposta completa";
+            System.Windows.Automation.AutomationProperties.SetName(button, "Copiar resposta completa");
+        };
+        _copyFeedbackTimers[button] = timer;
+        timer.Start();
+    }
     private void OnNewChat(object sender, RoutedEventArgs e) => Workspace.Add(QuickModel.Select(_models));
     private void OnCloseTab(object sender, RoutedEventArgs e)
     {

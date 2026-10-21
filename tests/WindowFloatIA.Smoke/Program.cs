@@ -178,6 +178,13 @@ internal static class Program
         Assert(savedPin == false && savedTheme == "Claro" && savedAccent == "Azul", "Preferences apply pin, theme and accent immediately");
         Render(preferences, "preferences-light");
         System.Threading.Tasks.Task.Run(HistoryChecks.RunAsync).GetAwaiter().GetResult();
+        var selectable = new MarkdownTextBlock { SourceText = "Trecho inicial", RenderMarkdown = false };
+        var textStart = selectable.Inlines.FirstInline!.ContentStart;
+        selectable.Selection.Select(textStart, textStart.GetPositionAtOffset(6)!);
+        Assert(selectable.IsReadOnly && selectable.Selection.Text == "Trecho", "Response text supports read-only partial selection");
+        selectable.SourceText = "Trecho inicial e conteúdo recebido depois";
+        Assert(selectable.Selection.Text == "Trecho", "Streaming append preserves existing selected text");
+        Assert(selectable.ContextMenu?.Items.Count == 2, "Response offers copy selection and select all menu");
         var markdown = new MarkdownTextBlock { SourceText = "## Title\n**bold** and `code`\n- item\n```cs\nvar x = 1;\n```" };
         var rendered = new System.Windows.Documents.TextRange(markdown.ContentStart, markdown.ContentEnd).Text;
         Assert(rendered.Contains("Title") && rendered.Contains("var x = 1;") && !rendered.Contains("**") && !rendered.Contains("##") && !rendered.Contains("```"), "Markdown renders headings, emphasis, lists and code without delimiters");
