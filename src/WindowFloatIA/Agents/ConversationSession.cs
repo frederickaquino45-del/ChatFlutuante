@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -16,6 +16,7 @@ public sealed class ConversationSession
     public async Task AskAsync(IChatAgent agent, string question, Action<string> onText, CancellationToken cancellationToken)
     {
         if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0) throw new InvalidOperationException("Uma resposta já está em andamento.");
+        var committed = false;
         try
         {
             if (string.IsNullOrWhiteSpace(question) || question.Length > 16000)
@@ -32,28 +33,60 @@ public sealed class ConversationSession
             if (answer.Length == 0) throw new AgentException("O agente concluiu sem retornar texto. Tente uma pergunta mais curta.");
             // Só pares concluídos entram no contexto. Falhas e cancelamentos não contaminam turnos futuros.
             _history.Add(new("user", question));
-            _history.Add(new("assistant", answer.ToString()));
-            while (_history.Count > 20 || TotalCharacters() > 64000) _history.RemoveRange(0, 2);
+            if (agent is WindowFloatIA.Tools.IToolTranscript structured && structured.TurnMessages.Count > 0) _history.AddRange(structured.TurnMessages);
+            else _history.Add(new("assistant", answer.ToString()));
+            Trim(); committed = true;
         }
-        finally { Interlocked.Exchange(ref _busy, 0); }
+        finally
+        {
+            // Retain completed tool exchanges even if the final model reply fails/cancels.
+            if (!committed && agent is WindowFloatIA.Tools.IToolTranscript structured && System.Linq.Enumerable.Any(structured.TurnMessages, m => m.Role == "tool"))
+            {
+                var results = new System.Collections.Generic.HashSet<string?>(System.Linq.Enumerable.Select(System.Linq.Enumerable.Where(structured.TurnMessages, m => m.Role == "tool"), m => m.ToolCallId));
+                _history.Add(new("user", question));
+                foreach (var message in structured.TurnMessages)
+                {
+                    if (message.ToolCalls is { Count: > 0 })
+                    {
+                        var completed = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(message.ToolCalls, c => results.Contains(c.Id)));
+                        if (completed.Count > 0) _history.Add(message with { ToolCalls = completed });
+                    }
+                    else _history.Add(message);
+                }
+                _history.Add(new("assistant", "Turno interrompido. Consulte os resultados das ferramentas; não repita ações já executadas.")); Trim();
+            }
+            Interlocked.Exchange(ref _busy, 0);
+        }
     }
 
     private int TotalCharacters()
     {
         var total = 0;
-        foreach (var message in _history) total += message.Content.Length;
+        foreach (var message in _history) total += message.Content.Length + (message.ToolCalls is null ? 0 : System.Text.Json.JsonSerializer.Serialize(message.ToolCalls).Length);
         return total;
     }
     public List<AgentMessage> Export() => new(_history);
     public void Restore(IReadOnlyList<AgentMessage> messages)
     {
         Clear();
-        for (var i = 0; i + 1 < messages.Count; i += 2)
+        // Restore whole turns, including associated structured calls/results. Never execute restored calls.
+        var turn = new List<AgentMessage>();
+        foreach (var message in messages)
         {
-            if (messages[i].Role != "user" || messages[i + 1].Role != "assistant") continue;
-            _history.Add(messages[i]); _history.Add(messages[i + 1]);
+            if (message.Role == "user") { if (turn.Count > 1 && turn[^1].Role == "assistant") _history.AddRange(turn); turn.Clear(); }
+            if (message.Role is "user" or "assistant" or "tool") turn.Add(message);
         }
-        while (_history.Count > 20 || TotalCharacters() > 64000) _history.RemoveRange(0, 2);
+        if (turn.Count > 1 && turn[0].Role == "user" && turn[^1].Role == "assistant") _history.AddRange(turn);
+        Trim();
+    }
+    private void Trim()
+    {
+        while (_history.Count > 20 || TotalCharacters() > 64000)
+        {
+            var next = _history.FindIndex(1, m => m.Role == "user");
+            if (next < 0) { _history.Clear(); break; }
+            _history.RemoveRange(0, next);
+        }
     }
     public void Clear()
     {

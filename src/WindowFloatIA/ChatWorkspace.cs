@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -16,6 +16,9 @@ public abstract class ObservableState : INotifyPropertyChanged
 }
 public sealed class ChatMessage(string author, string text, string background, bool? assistant = null) : ObservableState
 {
+    public TaskCompletionSource<bool>? Approval { get; set; }
+    private bool _approvalPending;
+    public bool ApprovalPending { get => _approvalPending; set { _approvalPending = value; Changed(nameof(ApprovalPending)); } }
     public string Author { get; } = author;
     public bool IsAssistant => assistant ?? Author.StartsWith("GPT", StringComparison.Ordinal);
     public string Background { get; } = background;

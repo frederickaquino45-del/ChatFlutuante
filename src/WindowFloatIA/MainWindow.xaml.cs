@@ -13,6 +13,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using WindowFloatIA.Agents;
 using WindowFloatIA.Auth;
+using WindowFloatIA.Tools;
 
 namespace WindowFloatIA;
 
@@ -237,6 +238,41 @@ public partial class MainWindow : Window
     {
         if (!_syncing && TabList.SelectedItem is ChatTab tab && tab != Workspace.Selected) Workspace.Select(tab);
     }
+    private readonly Dictionary<Button, DispatcherTimer> _copyFeedbackTimers = new();
+
+    private void OnCopyResponse(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not Button { Tag: ChatMessage message } button || !message.IsAssistant) return;
+        if (_copyFeedbackTimers.Remove(button, out var previousTimer)) previousTimer.Stop();
+        button.Content = "\uE8C8";
+        var copied = ClipboardCopy.TrySet(message.Text);
+        button.ToolTip = copied ? "Resposta copiada!" : "Não foi possível copiar. Tente novamente.";
+        Workspace.Selected.Status = copied ? "Resposta copiada" : "Área de transferência indisponível. Tente novamente.";
+        System.Windows.Automation.AutomationProperties.SetName(button, copied ? "Resposta copiada" : "Copiar resposta completa");
+        if (!copied) return;
+        // Draw the confirmation explicitly so it remains a circled check with either icon font.
+        var confirmation = new System.Windows.Shapes.Path
+        {
+            Width = 16, Height = 16, StrokeThickness = 1.5,
+            StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
+            StrokeEndLineCap = System.Windows.Media.PenLineCap.Round,
+            Data = System.Windows.Media.Geometry.Parse("M8,1 A7,7 0 1 1 8,15 A7,7 0 1 1 8,1 M4.5,8 L7,10.5 L11.5,5.5")
+        };
+        confirmation.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "AccentTextBrush");
+        button.Content = confirmation;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _copyFeedbackTimers.Remove(button);
+            button.Content = "\uE8C8";
+            button.ToolTip = "Copiar resposta completa";
+            System.Windows.Automation.AutomationProperties.SetName(button, "Copiar resposta completa");
+        };
+        _copyFeedbackTimers[button] = timer;
+        timer.Start();
+    }
     private void OnNewChat(object sender, RoutedEventArgs e) => Workspace.Add(QuickModel.Select(_models));
     private void OnCloseTab(object sender, RoutedEventArgs e)
     {
@@ -292,10 +328,32 @@ public partial class MainWindow : Window
         {
             var connection = SelectedConnection;
             if (connection is null || !connection.Enabled) { tab.Status = "Conexão desconectada. Abra Configurações para reconectar."; return; }
-            agent = connection.Kind == ProviderKind.OpenCode ? new OpenCodeAgent(Http, connection, tab) : new ProviderAgent(Http, connection, tab.Model);
+            agent = connection.Kind == ProviderKind.OpenCode ? new OpenCodeAgent(Http, connection, tab) : connection.Kind == ProviderKind.Ollama ? CreateToolAgent(connection, tab) : new ProviderAgent(Http, connection, tab.Model);
         }
         _ = Workspace.SendAsync(tab, agent);
     }
+    private IChatAgent CreateToolAgent(AgentConnection connection, ChatTab tab)
+    {
+        var store = new ToolSettingsStore();
+        var executor = new ToolExecutor(store, Http);
+        var cards = new Dictionary<string, ChatMessage>();
+        return new OllamaToolAgent(Http, connection, tab.Model, store, async (name, arguments, ct) =>
+        {
+            if (!cards.TryGetValue(name, out var card)) { card = new ChatMessage("Ferramenta · " + ToolCatalog.Labels[name], "", "#303036", false); cards[name] = card; tab.Messages.Add(card); }
+            card.Text = arguments + "\nAguardando autorização";
+            card.Approval = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); card.ApprovalPending = true;
+            try { return await card.Approval.Task.WaitAsync(ct); }
+            finally { card.ApprovalPending = false; }
+        }, (name, status) =>
+        {
+            if (!cards.TryGetValue(name, out var card)) { card = new ChatMessage("Ferramenta · " + name, status, "#303036", false); cards[name] = card; tab.Messages.Add(card); }
+            if (status != "Aguardando autorização") card.Text += "\n" + status;
+            if (status is "Concluída" or "Falhou") cards.Remove(name);
+            tab.Status = name + " · " + status;
+        }, executor.Execute);
+    }
+    private void OnAllowTool(object sender, RoutedEventArgs e) { if (sender is Button { Tag: ChatMessage message }) message.Approval?.TrySetResult(true); e.Handled = true; }
+    private void OnDenyTool(object sender, RoutedEventArgs e) { if (sender is Button { Tag: ChatMessage message }) message.Approval?.TrySetResult(false); e.Handled = true; }
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (TryHandleTabShortcut(e.Key, Keyboard.Modifiers, e.IsRepeat)) { e.Handled = true; return; }
@@ -361,6 +419,9 @@ public partial class MainWindow : Window
     private void OnSettings(object sender, RoutedEventArgs e)
     {
         PreferencesWindow? settings = null;
+        ToolsPanel tools;
+        try { tools = new ToolsPanel(Http, SelectedConnection, Workspace.Selected.Model, new ToolSettingsStore()); }
+        catch { Workspace.Selected.Status = "Não foi possível ler as configurações protegidas de ferramentas."; return; }
         settings = new PreferencesWindow(Topmost, _theme, _accent, () =>
         {
             OnAccountSettings(settings);
@@ -380,7 +441,7 @@ public partial class MainWindow : Window
                 if (CurrentConnectionId != "chatgpt") SetModels(SelectedConnection?.Models ?? new List<ModelChoice>());
             }
             catch { Workspace.Selected.Status = "Não foi possível abrir as conexões protegidas."; }
-        }) { Owner = this };
+        }, tools) { Owner = this };
         settings.ShowDialog();
     }
     private void OnAccountSettings(Window? owner = null)

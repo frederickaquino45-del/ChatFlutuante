@@ -13,6 +13,7 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        ToolTests.Run().GetAwaiter().GetResult();
         // In-process component checks and off-screen rendering; no desktop input automation.
         var window = new MainWindow(new WindowPreferences(), new TestAgent());
         var shortcuts = new MainWindow(new WindowPreferences(), new TestAgent());
@@ -154,6 +155,9 @@ internal static class Program
         Render(window, "light-theme");
         bool? savedPin = null; string? savedTheme = null; string? savedAccent = null;
         var preferences = new PreferencesWindow(true, "Escuro", "Violeta", () => { }, (pin, theme, accent) => { savedPin = pin; savedTheme = theme; savedAccent = accent; });
+        var toolPreview = new PreferencesWindow(true, "Escuro", "Violeta", () => { }, (_, _, _) => { }, tools: new WindowFloatIA.Tools.ToolsPanel(new System.Net.Http.HttpClient(), new AgentConnection { Id = "preview", Name = "Ollama", Kind = ProviderKind.Ollama, BaseUrl = "http://localhost:11434" }, "mistral:7b", new WindowFloatIA.Tools.ToolSettingsStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "tools.dat"))));
+        ((Button)toolPreview.FindName("ToolsNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Render(toolPreview, "tools-settings");
         Render(preferences, "preferences");
         ((Button)preferences.FindName("WindowNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Render(preferences, "preferences-window");
@@ -178,6 +182,13 @@ internal static class Program
         Assert(savedPin == false && savedTheme == "Claro" && savedAccent == "Azul", "Preferences apply pin, theme and accent immediately");
         Render(preferences, "preferences-light");
         System.Threading.Tasks.Task.Run(HistoryChecks.RunAsync).GetAwaiter().GetResult();
+        var selectable = new MarkdownTextBlock { SourceText = "Trecho inicial", RenderMarkdown = false };
+        var textStart = selectable.Inlines.FirstInline!.ContentStart;
+        selectable.Selection.Select(textStart, textStart.GetPositionAtOffset(6)!);
+        Assert(selectable.IsReadOnly && selectable.Selection.Text == "Trecho", "Response text supports read-only partial selection");
+        selectable.SourceText = "Trecho inicial e conteúdo recebido depois";
+        Assert(selectable.Selection.Text == "Trecho", "Streaming append preserves existing selected text");
+        Assert(selectable.ContextMenu?.Items.Count == 2, "Response offers copy selection and select all menu");
         var markdown = new MarkdownTextBlock { SourceText = "## Title\n**bold** and `code`\n- item\n```cs\nvar x = 1;\n```" };
         var rendered = new System.Windows.Documents.TextRange(markdown.ContentStart, markdown.ContentEnd).Text;
         Assert(rendered.Contains("Title") && rendered.Contains("var x = 1;") && !rendered.Contains("**") && !rendered.Contains("##") && !rendered.Contains("```"), "Markdown renders headings, emphasis, lists and code without delimiters");
