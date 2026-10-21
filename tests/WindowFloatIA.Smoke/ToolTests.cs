@@ -75,6 +75,12 @@ internal static class ToolTests
             using (var invalid = JsonDocument.Parse("{\"start\":\"tomorrow\",\"end\":\"later\"}"))
             { var rejected = false; try { ToolCatalog.Validate("list_calendar_events", invalid.RootElement); } catch (AgentException) { rejected = true; } Check(rejected, "Ambiguous calendar dates rejected before execution"); }
             var account = new CalendarAccount { Provider = "Google", AccessToken = "test-not-secret", Expires = DateTimeOffset.UtcNow.AddHours(1), CalendarId = "test-calendar" };
+            var calendarSettings = new ToolSettings();
+            Check(ToolCatalog.Unavailable("create_calendar_event", calendarSettings) != null, "Compatible model alone does not unlock unconfigured calendar");
+            calendarSettings.Calendars.Add(account);
+            Check(ToolCatalog.Unavailable("list_calendar_events", calendarSettings) != null, "Connected account still requires a default calendar");
+            calendarSettings.DefaultCalendarAccount = account.Id;
+            Check(ToolCatalog.Unavailable("create_calendar_event", calendarSettings) == null && ToolCatalog.Unavailable("list_calendar_events", calendarSettings) == null, "Connected default calendar unlocks both calendar tools");
             var pages = 0;
             using (var http = new HttpClient(new Handler(async r => {
                 Check(r.RequestUri!.Host == "www.googleapis.com", "Calendar uses fixed provider host");

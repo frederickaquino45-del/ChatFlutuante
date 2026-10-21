@@ -142,3 +142,14 @@ aplicativos cadastrados e criar/consultar eventos Google ou Outlook. Alarmes no
 Relógio têm integração experimental, condicionada à validação de acessibilidade.
 Tudo começa desabilitado. Consulte [FERRAMENTAS.md](FERRAMENTAS.md) para configurar
 OAuth próprio, autorizações e conhecer as limitações.
+
+## Pacote único e desinstalação
+
+Ao executar `gerar-executavel.cmd`, a saída mais recente substitui a anterior em
+`artifacts/WfloatIA-win-x64`, com ZIP e SHA-256. Pacotes antigos com data dessa
+arquitetura são limpos somente depois de a nova geração terminar com sucesso.
+Encerre o aplicativo pela bandeja antes de gerar novamente.
+
+Cada novo pacote inclui `desinstalar.cmd`. Ele remove os arquivos distribuídos e
+a inicialização automática dessa cópia, preservando conversas e configurações por
+padrão. Veja os detalhes e a opção de apagar dados em [ATUALIZACAO.md](ATUALIZACAO.md).

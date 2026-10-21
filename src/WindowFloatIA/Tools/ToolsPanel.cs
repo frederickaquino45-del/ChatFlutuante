@@ -19,16 +19,20 @@ public sealed class ToolsPanel : StackPanel
     private readonly StackPanel _rows = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
     private ToolCapability _capability;
+    private bool _loaded;
+    private readonly TextBlock _compatibilityStatus = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _calendarStatus = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
+    private readonly TextBlock _calendarHeading = new() { Text = "Calendários — registros OAuth próprios", FontSize = 17, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 12, 0, 6) };
     public ToolsPanel(HttpClient http, AgentConnection? connection, string model, ToolSettingsStore store)
     {
         _http = http; _connection = connection; _model = model; _store = store; _settings = store.Load();
         AddText("Ferramentas", true);
         AddText("Permissões para " + (connection?.Name ?? "ChatGPT") + " / " + model + ". Todas começam desabilitadas. Dados consultados serão enviados ao modelo desta conexão.");
+        Children.Add(_compatibilityStatus);
+        Children.Add(_calendarStatus);
+        AddButton("Configurar calendário Google / Microsoft", () => { _calendarHeading.BringIntoView(); return Task.CompletedTask; });
         Children.Add(_status);
-        AddButton("Verificar compatibilidade", async () => {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            _capability = connection == null ? ToolCapability.Unsupported : await OllamaToolAgent.Capability(http, connection, model, timeout.Token); Render();
-        });
+        AddButton("Verificar compatibilidade", VerifyCompatibilityAsync);
         AddButton("Testar chamada estruturada (sem executar ações)", async () => {
             if (_capability != ToolCapability.Supported || connection == null) throw new AgentException("Verifique primeiro a compatibilidade do modelo.");
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); timeout.CancelAfter(TimeSpan.FromMinutes(2));
@@ -51,10 +55,14 @@ public sealed class ToolsPanel : StackPanel
             } return Task.CompletedTask;
         });
         AddButton("Remover aplicativo selecionado", () => { if (apps.SelectedIndex >= 0) { _settings.Applications.RemoveAt(apps.SelectedIndex); Save(); apps.ItemsSource = _settings.Applications.Select(a => a.Id + " — " + a.Path).ToList(); Render(); } return Task.CompletedTask; });
-        AddText("Calendários — registros OAuth próprios", true);
+        Children.Add(_calendarHeading);
+        AddText("1. Informe o registro OAuth próprio (Client ID) e conecte sua conta.\n2. Carregue e selecione um calendário.\n3. Salve como padrão. Os checkboxes serão liberados para o modelo compatível.");
+        AddText("Contas conectadas");
         var accounts = new ComboBox { ItemsSource = _settings.Calendars, SelectedItem = _settings.Calendars.FirstOrDefault(a => a.Id == _settings.DefaultCalendarAccount) }; Children.Add(accounts);
+        AddText("Serviço de calendário");
         var provider = new ComboBox { ItemsSource = new[] { "Google", "Microsoft" }, SelectedIndex = 0 }; Children.Add(provider);
         var name = Field("Nome da conta"); var client = Field("Client ID"); AddText("Client secret (apenas Google Desktop, se fornecido no registro)"); var secret = new PasswordBox(); Children.Add(secret);
+        AddText("Calendário da conta (carregue após conectar)");
         var calendarPicker = new ComboBox { DisplayMemberPath = "Name" }; Children.Add(calendarPicker);
         accounts.SelectionChanged += (_, _) => { if (accounts.SelectedItem is CalendarAccount a) { name.Text = a.Name; provider.SelectedItem = a.Provider; client.Text = a.ClientId; secret.Password = a.ClientSecret; calendarPicker.ItemsSource = null; } };
         AddButton("Nova conta", () => { accounts.SelectedItem = null; name.Clear(); client.Clear(); secret.Clear(); calendarPicker.ItemsSource = null; return Task.CompletedTask; });
@@ -72,13 +80,27 @@ public sealed class ToolsPanel : StackPanel
         AddButton("Carregar calendários da conta", async () => { if (accounts.SelectedItem is not CalendarAccount a) throw new AgentException("Selecione uma conta."); calendarPicker.ItemsSource = await new CalendarService(_http, Save).ListCalendars(a, _lifetime.Token); });
         AddButton("Usar calendário selecionado como padrão", () => {
             if (accounts.SelectedItem is not CalendarAccount a || calendarPicker.SelectedItem is not CalendarChoice choice) throw new AgentException("Selecione uma conta e um calendário.");
-            a.CalendarId = choice.Id; _settings.DefaultCalendarAccount = a.Id; Save(); Render(); _status.Text += " Calendário padrão: " + a.Name + " / " + choice.Name; return Task.CompletedTask;
+            a.CalendarId = choice.Id; _settings.DefaultCalendarAccount = a.Id; Save(); Render(); _status.Text = "Calendário padrão: " + a.Name + " / " + choice.Name; return Task.CompletedTask;
         });
         AddButton("Desconectar conta selecionada", () => { if (accounts.SelectedItem is CalendarAccount a) { _settings.Calendars.Remove(a); if (_settings.DefaultCalendarAccount == a.Id) _settings.DefaultCalendarAccount = ""; Save(); accounts.ItemsSource = _settings.Calendars.ToList(); calendarPicker.ItemsSource = null; Render(); } return Task.CompletedTask; });
         if (accounts.SelectedItem is CalendarAccount initial) { name.Text = initial.Name; provider.SelectedItem = initial.Provider; client.Text = initial.ClientId; secret.Password = initial.ClientSecret; }
-        Loaded += (_, _) => { var window = Window.GetWindow(this); if (window != null) window.Closed += (_, _) => _lifetime.Cancel(); };
+        Loaded += async (_, _) =>
+        {
+            if (_loaded) return; _loaded = true;
+            var window = Window.GetWindow(this); if (window != null) window.Closed += (_, _) => _lifetime.Cancel();
+            try { await VerifyCompatibilityAsync(); }
+            catch (OperationCanceledException) { _compatibilityStatus.Text = "Verificação cancelada ou tempo esgotado. Tente novamente."; }
+            catch { _compatibilityStatus.Text = "Não foi possível verificar o modelo. Tente novamente."; }
+        };
         AddText("Últimas operações (IDs para conferência)", true);
         foreach (var operation in _settings.Operations.TakeLast(10).Reverse()) AddText(operation.Time.ToLocalTime().ToString("g") + " · " + operation.Tool + " · " + operation.State + "\n" + operation.Id);
+        Render();
+    }
+    private async Task VerifyCompatibilityAsync()
+    {
+        _compatibilityStatus.Text = "Verificando suporte do modelo a ferramentas…";
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token); timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        _capability = _connection == null ? ToolCapability.Unsupported : await OllamaToolAgent.Capability(_http, _connection, _model, timeout.Token);
         Render();
     }
     private void Save()
@@ -96,7 +118,11 @@ public sealed class ToolsPanel : StackPanel
     private void Render()
     {
         _rows.Children.Clear();
-        _status.Text = _connection?.Kind != ProviderKind.Ollama ? "Ferramentas disponíveis somente para conexões Ollama nesta versão." : _capability switch { ToolCapability.Supported => "Compatível", ToolCapability.Unsupported => "Não compatível", _ => "Não foi possível verificar. Clique em Verificar compatibilidade." };
+        _compatibilityStatus.Text = _connection?.Kind != ProviderKind.Ollama ? "Ferramentas disponíveis somente para conexões Ollama nesta versão." : _capability switch { ToolCapability.Supported => "Modelo compatível com ferramentas. Cada integração também precisa estar configurada.", ToolCapability.Unsupported => "Não compatível", _ => "Não foi possível verificar. Clique em Verificar compatibilidade." };
+        var calendar = _settings.Calendars.FirstOrDefault(a => a.Id == _settings.DefaultCalendarAccount);
+        _calendarStatus.Text = ToolCatalog.Unavailable("create_calendar_event", _settings) != null
+            ? "Calendário bloqueado: falta conectar uma conta Google/Microsoft e escolher o calendário padrão. O teste do modelo não conecta o calendário."
+            : "Calendário configurado: " + calendar!.Name + " · " + calendar.Provider;
         var policies = _settings.For(_connection?.Id ?? "chatgpt", _model);
         foreach (var tool in ToolCatalog.Labels)
         {
