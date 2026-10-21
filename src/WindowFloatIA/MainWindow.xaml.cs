@@ -13,6 +13,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using WindowFloatIA.Agents;
 using WindowFloatIA.Auth;
+using WindowFloatIA.Tools;
 
 namespace WindowFloatIA;
 
@@ -327,10 +328,32 @@ public partial class MainWindow : Window
         {
             var connection = SelectedConnection;
             if (connection is null || !connection.Enabled) { tab.Status = "Conexão desconectada. Abra Configurações para reconectar."; return; }
-            agent = connection.Kind == ProviderKind.OpenCode ? new OpenCodeAgent(Http, connection, tab) : new ProviderAgent(Http, connection, tab.Model);
+            agent = connection.Kind == ProviderKind.OpenCode ? new OpenCodeAgent(Http, connection, tab) : connection.Kind == ProviderKind.Ollama ? CreateToolAgent(connection, tab) : new ProviderAgent(Http, connection, tab.Model);
         }
         _ = Workspace.SendAsync(tab, agent);
     }
+    private IChatAgent CreateToolAgent(AgentConnection connection, ChatTab tab)
+    {
+        var store = new ToolSettingsStore();
+        var executor = new ToolExecutor(store, Http);
+        var cards = new Dictionary<string, ChatMessage>();
+        return new OllamaToolAgent(Http, connection, tab.Model, store, async (name, arguments, ct) =>
+        {
+            if (!cards.TryGetValue(name, out var card)) { card = new ChatMessage("Ferramenta · " + ToolCatalog.Labels[name], "", "#303036", false); cards[name] = card; tab.Messages.Add(card); }
+            card.Text = arguments + "\nAguardando autorização";
+            card.Approval = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); card.ApprovalPending = true;
+            try { return await card.Approval.Task.WaitAsync(ct); }
+            finally { card.ApprovalPending = false; }
+        }, (name, status) =>
+        {
+            if (!cards.TryGetValue(name, out var card)) { card = new ChatMessage("Ferramenta · " + name, status, "#303036", false); cards[name] = card; tab.Messages.Add(card); }
+            if (status != "Aguardando autorização") card.Text += "\n" + status;
+            if (status is "Concluída" or "Falhou") cards.Remove(name);
+            tab.Status = name + " · " + status;
+        }, executor.Execute);
+    }
+    private void OnAllowTool(object sender, RoutedEventArgs e) { if (sender is Button { Tag: ChatMessage message }) message.Approval?.TrySetResult(true); e.Handled = true; }
+    private void OnDenyTool(object sender, RoutedEventArgs e) { if (sender is Button { Tag: ChatMessage message }) message.Approval?.TrySetResult(false); e.Handled = true; }
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (TryHandleTabShortcut(e.Key, Keyboard.Modifiers, e.IsRepeat)) { e.Handled = true; return; }
@@ -396,6 +419,9 @@ public partial class MainWindow : Window
     private void OnSettings(object sender, RoutedEventArgs e)
     {
         PreferencesWindow? settings = null;
+        ToolsPanel tools;
+        try { tools = new ToolsPanel(Http, SelectedConnection, Workspace.Selected.Model, new ToolSettingsStore()); }
+        catch { Workspace.Selected.Status = "Não foi possível ler as configurações protegidas de ferramentas."; return; }
         settings = new PreferencesWindow(Topmost, _theme, _accent, () =>
         {
             OnAccountSettings(settings);
@@ -415,7 +441,7 @@ public partial class MainWindow : Window
                 if (CurrentConnectionId != "chatgpt") SetModels(SelectedConnection?.Models ?? new List<ModelChoice>());
             }
             catch { Workspace.Selected.Status = "Não foi possível abrir as conexões protegidas."; }
-        }) { Owner = this };
+        }, tools) { Owner = this };
         settings.ShowDialog();
     }
     private void OnAccountSettings(Window? owner = null)

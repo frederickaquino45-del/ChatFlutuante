@@ -1,4 +1,4 @@
-# Wfloat.IA
+﻿# Wfloat.IA
 
 ![Wfloat.IA](src/WindowFloatIA/Assets/logo-flat.png)
 
@@ -134,3 +134,11 @@ Distribuído sob a [licença MIT](LICENSE). O projeto é independente e não é 
 O aplicativo portátil pode ser atualizado sem desinstalar: encerre pelo menu da bandeja e substitua o pacote completo no mesmo caminho, preservando `%LOCALAPPDATA%/WindowFloatIA`. Consulte [ATUALIZACAO.md](ATUALIZACAO.md) para backup e recuperação e [SECURITY.md](SECURITY.md) para a revisão de segurança e seus limites.
 
 Novas conversas e a aba selecionada ao iniciar o aplicativo priorizam modelos leves do catálogo (nano/tiny, luna/mini, haiku/flash-lite, flash/small/lite). Em modelos locais com tamanho explícito, prioriza-se o menor número de parâmetros. Essa escolha é uma heurística pelos nomes, pois os catálogos não fornecem custo e latência comparáveis. Se nenhum modelo for reconhecido, usa-se o primeiro disponível. É possível trocar manualmente durante a conversa; abrir outra aba volta ao padrão leve.
+
+## Ferramentas Windows e calendário (Ollama)
+
+Configure permissões por modelo para consultar informações do sistema, abrir
+aplicativos cadastrados e criar/consultar eventos Google ou Outlook. Alarmes no
+Relógio têm integração experimental, condicionada à validação de acessibilidade.
+Tudo começa desabilitado. Consulte [FERRAMENTAS.md](FERRAMENTAS.md) para configurar
+OAuth próprio, autorizações e conhecer as limitações.

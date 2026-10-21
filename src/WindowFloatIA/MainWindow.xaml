@@ -80,6 +80,11 @@
           <TextBlock Text="{Binding Author}" Foreground="{DynamicResource AccentTextBrush}" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"/>
          </DockPanel>
          <local:MarkdownTextBlock SourceText="{Binding Text}" RenderMarkdown="{Binding IsAssistant}" Margin="0,8,0,0"/>
+         <StackPanel Orientation="Horizontal">
+          <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding ApprovalPending}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></StackPanel.Style>
+          <Button Content="Permitir uma vez" Click="OnAllowTool" Tag="{Binding}" Margin="0,8,8,0" Padding="10,6"/>
+          <Button Content="Cancelar" Click="OnDenyTool" Tag="{Binding}" Margin="0,8,0,0" Padding="10,6"/>
+         </StackPanel>
         </StackPanel>
        </Border>
       </DataTemplate></ItemsControl.ItemTemplate>

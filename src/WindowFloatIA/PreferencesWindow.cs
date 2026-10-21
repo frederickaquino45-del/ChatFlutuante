@@ -6,7 +6,7 @@ namespace WindowFloatIA;
 
 internal sealed class PreferencesWindow : Window
 {
-    public PreferencesWindow(bool pinned, string theme, string accent, Action accounts, Action<bool, string, string> changed, Action? connections = null)
+    public PreferencesWindow(bool pinned, string theme, string accent, Action accounts, Action<bool, string, string> changed, Action? connections = null, StackPanel? tools = null)
     {
         Title = "Configurações · WindowFloatIA";
         Width = 760; Height = 560; MinWidth = 700; MinHeight = 400;
@@ -60,6 +60,7 @@ internal sealed class PreferencesWindow : Window
             navigation.Add(button); sidebar.Children.Add(button);
             return button;
         }
+        if (tools != null) Link("ToolsNavigation", "\uE713", "Ferramentas", tools);
         var accountLink = Link("AccountNavigation", "\uE77B", "Conta", accountPage);
         var group = new TextBlock { Text = "Prefer\u00eancias", Margin = new Thickness(12, 22, 0, 10), FontSize = 12 };
         group.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush"); sidebar.Children.Add(group);

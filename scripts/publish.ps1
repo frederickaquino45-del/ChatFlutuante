@@ -5,7 +5,7 @@ $root = Split-Path $PSScriptRoot -Parent
 $output = Join-Path $root "artifacts/WfloatIA-$Runtime"
 dotnet publish (Join-Path $root 'src/WindowFloatIA/WindowFloatIA.csproj') -c Release -r $Runtime --self-contained true --disable-build-servers -o $output
 if ($LASTEXITCODE -ne 0) { throw 'Falha na publicação.' }
-Copy-Item (Join-Path $root 'README.md'),(Join-Path $root 'LICENSE'),(Join-Path $root 'CONEXOES.md'),(Join-Path $root 'ATUALIZACAO.md'),(Join-Path $root 'SECURITY.md') -Destination $output
+Copy-Item (Join-Path $root 'README.md'),(Join-Path $root 'LICENSE'),(Join-Path $root 'CONEXOES.md'),(Join-Path $root 'ATUALIZACAO.md'),(Join-Path $root 'SECURITY.md'),(Join-Path $root 'FERRAMENTAS.md') -Destination $output
 $zip = Join-Path $root "artifacts/WfloatIA-$Runtime.zip"
 Compress-Archive -Path "$output/*" -DestinationPath $zip -Force
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()

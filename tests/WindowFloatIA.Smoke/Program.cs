@@ -13,6 +13,7 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        ToolTests.Run().GetAwaiter().GetResult();
         // In-process component checks and off-screen rendering; no desktop input automation.
         var window = new MainWindow(new WindowPreferences(), new TestAgent());
         var shortcuts = new MainWindow(new WindowPreferences(), new TestAgent());
@@ -154,6 +155,9 @@ internal static class Program
         Render(window, "light-theme");
         bool? savedPin = null; string? savedTheme = null; string? savedAccent = null;
         var preferences = new PreferencesWindow(true, "Escuro", "Violeta", () => { }, (pin, theme, accent) => { savedPin = pin; savedTheme = theme; savedAccent = accent; });
+        var toolPreview = new PreferencesWindow(true, "Escuro", "Violeta", () => { }, (_, _, _) => { }, tools: new WindowFloatIA.Tools.ToolsPanel(new System.Net.Http.HttpClient(), new AgentConnection { Id = "preview", Name = "Ollama", Kind = ProviderKind.Ollama, BaseUrl = "http://localhost:11434" }, "mistral:7b", new WindowFloatIA.Tools.ToolSettingsStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "tools.dat"))));
+        ((Button)toolPreview.FindName("ToolsNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Render(toolPreview, "tools-settings");
         Render(preferences, "preferences");
         ((Button)preferences.FindName("WindowNavigation")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Render(preferences, "preferences-window");

@@ -21,7 +21,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'A compilacao falhou. Confira os erros acima.' }
     $exe = Join-Path $output 'WindowFloatIA.exe'
     if (-not (Test-Path -LiteralPath $exe)) { throw 'Executavel nao encontrado na saida.' }
-    foreach ($document in @('README.md','CONEXOES.md','LICENSE','ATUALIZACAO.md','SECURITY.md')) {
+    foreach ($document in @('README.md','CONEXOES.md','LICENSE','ATUALIZACAO.md','SECURITY.md', 'FERRAMENTAS.md')) {
         $source = Join-Path $PSScriptRoot $document
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $output }
     }
